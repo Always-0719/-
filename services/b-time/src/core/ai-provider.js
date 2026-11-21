@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { generateMilestones } from './milestone-engine.js';
+import { resizeTasks } from './task-splitter.js';
 
 const DAY = 86400000;
 
@@ -10,36 +11,39 @@ const AI_TASKS = [
   { title: '展示准备', description: '展示/提交材料准备（AI 拆解建议，可编辑）', deliverableSpec: '展示材料链接', estimatedLoad: 2, dueFraction: 0.9 },
 ];
 
-// provider 契约：async generate({ text, memberCount, finalDdl, signal }) → { draft, tokens }
-// text 已脱敏；draftId 由编排器统一重发
+// provider 契约：async generate({ text, memberCount, taskCount, finalDdl, signal }) → { draft, tokens }
+// text 已脱敏；draftId 由编排器统一重发；taskCount 非空时任务数必须精确等于它
 export const mockProvider = {
-  async generate({ text, memberCount, finalDdl }) {
+  async generate({ text, memberCount, taskCount, finalDdl }) {
     const nowMs = Date.now();
     const totalDays = (Date.parse(finalDdl) - nowMs) / DAY;
-    const count = Math.max(2, Math.min(4, (memberCount || 4) + 1));
+    const count = taskCount ?? Math.max(2, Math.min(4, (memberCount || 4) + 1));
+    const base = AI_TASKS.slice(0, Math.min(count, AI_TASKS.length)).map((t, i) => ({
+      key: `t${i + 1}`,
+      title: `任务${i + 1}：${t.title}`,
+      description: t.description,
+      deliverableSpec: t.deliverableSpec,
+      estimatedLoad: t.estimatedLoad,
+      due: new Date(nowMs + totalDays * t.dueFraction * DAY).toISOString(),
+      dependsOn: [],
+    }));
     const draft = {
       draftId: `d-${crypto.randomUUID()}`,
       assignment: { title: 'AI 拆解作业', finalDdl, requirementsText: text, rubric: null },
-      tasks: AI_TASKS.slice(0, count).map((t, i) => ({
-        key: `t${i + 1}`,
-        title: `任务${i + 1}：${t.title}`,
-        description: t.description,
-        deliverableSpec: t.deliverableSpec,
-        estimatedLoad: t.estimatedLoad,
-        due: new Date(nowMs + totalDays * t.dueFraction * DAY).toISOString(),
-        dependsOn: [],
-      })),
+      tasks: resizeTasks(base, count, { nowMs, finalDdl }),
       milestones: generateMilestones({ finalDdl }),
     };
     return { draft, tokens: Math.ceil(text.length / 2) + 200 };
   },
 };
 
-export function buildPrompt({ text, memberCount, finalDdl }) {
+export function buildPrompt({ text, memberCount, taskCount, finalDdl }) {
   return [
     '你是小组作业拆解助手。把作业要求拆解为 TaskDraft v1 JSON，只输出 JSON。',
     '结构：{"assignment":{"title","finalDdl","requirementsText","rubric":null},"tasks":[...],"milestones":[...]}',
-    'tasks 2–4 个，每个含 key/title/description/deliverableSpec/estimatedLoad(1–5整数)/due(ISO,≤finalDdl)/dependsOn(key数组,无环)；禁止 assignee/userId（认领制）。',
+    taskCount == null
+      ? 'tasks 2–4 个，每个含 key/title/description/deliverableSpec/estimatedLoad(1–5整数)/due(ISO,≤finalDdl)/dependsOn(key数组,无环)；禁止 assignee/userId（认领制）。'
+      : `tasks 恰好 ${taskCount} 个（用户指定的任务分配数量，多一个少一个都算错），每个含 key/title/description/deliverableSpec/estimatedLoad(1–5整数)/due(ISO,≤finalDdl)/dependsOn(key数组,无环)；禁止 assignee/userId（认领制）。`,
     'milestones 1–4 个 {name,due}，due 升序。',
     `finalDdl=${finalDdl}；memberCount=${memberCount || 4}；作业要求：${text}`,
   ].join('\n');
@@ -47,14 +51,14 @@ export function buildPrompt({ text, memberCount, finalDdl }) {
 
 export function openAiProvider(env = process.env) {
   return {
-    async generate({ text, memberCount, finalDdl, signal }) {
+    async generate({ text, memberCount, taskCount, finalDdl, signal }) {
       if (!env.AI_API_KEY || !env.AI_API_URL) throw new Error('AI provider 未配置（AI_API_KEY/AI_API_URL）');
       const res = await fetch(env.AI_API_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${env.AI_API_KEY}` },
         body: JSON.stringify({
           model: env.AI_MODEL || 'gpt-4o-mini',
-          messages: [{ role: 'user', content: buildPrompt({ text, memberCount, finalDdl }) }],
+          messages: [{ role: 'user', content: buildPrompt({ text, memberCount, taskCount, finalDdl }) }],
           response_format: { type: 'json_object' },
         }),
         signal,

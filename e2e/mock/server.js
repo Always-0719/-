@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 
 const PORT = Number(process.env.MOCK_PORT || 8787);
+const B_BASE = process.env.B_BASE_URL || process.env.B_API || 'http://127.0.0.1:8788';
 const uuid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const DAY = 86_400_000;
@@ -42,6 +43,23 @@ function writeEvent({ eventId = uuid(), groupId, assignmentId = null, type, acto
 
 const taskIdsOf = (aid) => [...db.tasks.values()].filter((t) => t.assignmentId === aid);
 const isMember = (gid, uid) => db.groups.get(gid)?.members.has(uid) ?? false;
+
+// 评论通知交给 B 发站内信；B 不在线时评论本身不受影响，最多重试一次。
+async function notifyB(payload) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(`${B_BASE}/v1/internal/notify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(1500),
+      });
+      await res.text();
+      if (res.ok || res.status === 400 || res.status === 404) return;
+    } catch { /* B 未启动或超时：A 主链路不回滚 */ }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 250));
+  }
+}
 
 // ---------- A 线原型接真所需的补充状态 ----------
 // 以下容器只服务 A 原型的读写面；既有 A/B/C 契约载荷形状不变（加厚字段均为追加）。
@@ -219,20 +237,26 @@ function generateMilestones(finalDdl) {
   return future.length ? future : all.slice(-1);
 }
 
-function templateDraft({ title, requirementsText, finalDdl, memberCount }) {
-  const totalDays = Math.max(2, Math.round((Date.parse(finalDdl) - Date.now()) / DAY));
+function templateDraft({ title, requirementsText, finalDdl, memberCount, taskCount }) {
+  const nowMs = Date.now();
+  const realDays = (Date.parse(finalDdl) - nowMs) / DAY;
+  const totalDays = Math.max(2, Math.round(realDays));
   const offsets = totalDays >= 10
     ? [5, 3, 2, 1]
     : [0.5, 0.7, 0.85, 0.95].map((f) => Math.max(1, Math.round(totalDays * (1 - f))));
-  const taskCount = Math.max(2, Math.min(4, memberCount + 1));
+  // taskCount（用户填写的任务分配数量）优先；未传时沿用旧口径 clamp(memberCount+1,2,4)
+  const count = taskCount ?? Math.max(2, Math.min(4, memberCount + 1));
   const taskTitles = ['资料调研', '初稿撰写', '整合校对', '展示准备'];
-  const tasks = Array.from({ length: taskCount }, (_, i) => ({
+  const tasks = Array.from({ length: count }, (_, i) => ({
     key: `t${i + 1}`,
-    title: `任务${i + 1}：${taskTitles[i] || '补充任务'}`,
+    title: `任务${i + 1}：${taskTitles[i % 4]}${i >= 4 ? `（拆分 ${Math.floor(i / 4) + 1}）` : ''}`,
     description: '由 mock 生成，供 e2e 骨架使用',
     deliverableSpec: '外部文档链接',
     estimatedLoad: (i % 5) + 1,
-    due: plusDays(Math.max(1, totalDays - offsets[0] - i)),
+    // 指定数量时按比例铺满 (now, finalDdl)，避免条数一多就撞到 DDL 之外
+    due: taskCount == null
+      ? plusDays(Math.max(1, totalDays - offsets[0] - i))
+      : new Date(nowMs + realDays * (0.3 + (0.6 * i) / (count - 1)) * DAY).toISOString(),
     dependsOn: [],
   }));
   return {
@@ -256,7 +280,10 @@ const routes = [
       db.byCode.set(code, userId);
     }
     ensureProfile(userId, { wxOpenid: code });
-    const token = `tok-${code}`;
+    // token 携带 userId（而非 code）：种子身份 code→固定 userId 的映射只有 mock 知道，
+    // B 侧从 token 解出 userId 才能与 A 一致。userId 要进 authorization 头，HTTP 头仅允许
+    // ISO-8859-1，中文昵称派生的 userId 必须百分号编码。
+    const token = `tok-${encodeURIComponent(userId)}`;
     db.users.set(token, { userId, code });
     return [200, { token, userId }];
   }],
@@ -283,8 +310,12 @@ const routes = [
       userId = known ? known.id : `u-${email}`;
       db.byCode.set(email, userId);
     }
-    ensureProfile(userId, { email, name: db.profiles.has(userId) ? undefined : email.split('@')[0].slice(0, 8) });
-    const token = `tok-${email}`;
+    // name 可选：原型注册页首次建档时作为昵称（decisions #28），已有账号登录忽略该字段。
+    const freshName = typeof body.name === 'string' && body.name.trim()
+      ? body.name.trim().slice(0, 12)
+      : email.split('@')[0].slice(0, 8);
+    ensureProfile(userId, { email, name: db.profiles.has(userId) ? undefined : freshName });
+    const token = `tok-${encodeURIComponent(userId)}`;
     db.users.set(token, { userId, code: email });
     return [200, { token, userId }];
   }],
@@ -456,6 +487,40 @@ const routes = [
     return [200, { groupId: g.id, ownerId: g.ownerId }];
   }],
 
+  // 删组：仅组长。级联清掉组下作业/任务/交付物/评论/里程碑/提交快照/互评窗口与记录/报告/邀请码/入组申请/草稿。
+  // 账本 append-only 不动（Event v1 无 group_delete 类型，与 group_create / transfer 同批裁定不入账）。
+  // B 侧作业态由调用方先打 DELETE /v1/internal/groups/{gid} 清理，否则提醒会继续发给已删除的组。
+  ['DELETE', /^\/v1\/groups\/([^/]+)$/, ({ user, m }) => {
+    const gid = m[0];
+    const g = db.groups.get(gid);
+    if (!g) return [404, { error: 'group not found' }];
+    if (g.ownerId !== user.userId) return [403, { error: 'only leader can delete group' }];
+
+    const aids = [...db.assignments.values()].filter((a) => a.groupId === gid).map((a) => a.id);
+    const aidSet = new Set(aids);
+    const tids = [...db.tasks.values()].filter((t) => aidSet.has(t.assignmentId)).map((t) => t.id);
+    const windowIds = aids.map((aid) => db.reviewWindows.get(aid)?.id).filter(Boolean);
+
+    for (const tid of tids) { db.comments.delete(tid); db.taskMeta.delete(tid); db.tasks.delete(tid); }
+    for (const aid of aids) {
+      db.milestones.delete(aid);
+      db.finals.delete(aid);
+      db.finalHistory.delete(aid);
+      db.reviewWindows.delete(aid);
+      db.reports.delete(aid);
+      db.assignments.delete(aid);
+    }
+    for (const [rid, r] of [...db.peerReviews]) if (aidSet.has(r.assignmentId)) db.peerReviews.delete(rid);
+    for (const [tok, e] of [...db.evidenceTokens]) if (windowIds.includes(e.windowId)) db.evidenceTokens.delete(tok);
+    for (const [did, owner] of [...db.draftGroups]) if (owner === gid) { db.drafts.delete(did); db.draftGroups.delete(did); }
+    for (const [code, inv] of [...db.invites]) if (inv.groupId === gid) db.invites.delete(code);
+    for (const k of [...db.joinRequests.keys()]) if (k.startsWith(gid + '|')) db.joinRequests.delete(k);
+    for (const k of [...db.joinMeta.keys()]) if (k.startsWith(gid + '|')) db.joinMeta.delete(k);
+    db.groups.delete(gid);
+
+    return [200, { groupId: gid, deleted: true, assignments: aids.length, tasks: tids.length }];
+  }],
+
   // 组下作业列表：A 原型由组进入作业的唯一入口。
   ['GET', /^\/v1\/groups\/([^/]+)\/assignments$/, ({ user, m }) => {
     const g = db.groups.get(m[0]);
@@ -469,25 +534,33 @@ const routes = [
 
   // ---- B 线：AI 拆解 / 草稿 / 里程碑 ----
   ['POST', /^\/v1\/assignments\/ai-draft$/, ({ user, body }) => {
-    const { requirementsText = '', memberCount, finalDdl, groupId } = body;
+    const { requirementsText = '', memberCount, taskCount, finalDdl, groupId } = body;
     if (!finalDdl || !groupId) return [400, { error: 'finalDdl 与 groupId 必填' }];
+    if (taskCount !== undefined && (!Number.isInteger(taskCount) || taskCount < 2 || taskCount > 12)) {
+      return [400, { error: 'taskCount 必须为 2–12 整数' }];
+    }
     if (!db.groups.get(groupId)?.members.has(user.userId)) return [403, { error: 'not a group member' }];
 
     // 拆解口径与真 B mockProvider 对齐：due = now + (finalDdl-now)×fraction，恒落在 (now, finalDdl)；
-    // 任务数 = clamp(memberCount+1, 2, 4)。逾期/在途等场景由测试在 PUT 草稿时显式构造，
-    // 不依赖某个拆解实现的偏移巧合——否则换一套合法拆解就会让前提静默失效。
+    // 任务数 = taskCount（用户指定的任务分配数量）优先，否则 clamp(memberCount+1, 2, 4)。
+    // 逾期/在途等场景由测试在 PUT 草稿时显式构造，不依赖某个拆解实现的偏移巧合。
     const nowMs = Date.now();
     const totalDays = (Date.parse(finalDdl) - nowMs) / DAY;
-    const count = Math.max(2, Math.min(4, (memberCount || 4) + 1));
-    const tasks = AI_TASKS.slice(0, count).map((t, i) => ({
-      key: `t${i + 1}`,
-      title: `任务${i + 1}：${t.title}`,
-      description: t.description,
-      deliverableSpec: t.deliverableSpec,
-      estimatedLoad: t.estimatedLoad,
-      due: new Date(nowMs + totalDays * t.dueFraction * DAY).toISOString(),
-      dependsOn: [],
-    }));
+    const count = taskCount ?? Math.max(2, Math.min(4, (memberCount || 4) + 1));
+    const tasks = Array.from({ length: count }, (_, i) => {
+      const t = AI_TASKS[i % AI_TASKS.length];
+      const round = Math.floor(i / AI_TASKS.length);
+      const frac = count <= AI_TASKS.length ? t.dueFraction : 0.3 + (0.6 * i) / (count - 1);
+      return {
+        key: `t${i + 1}`,
+        title: `任务${i + 1}：${t.title}${round ? `（拆分 ${round + 1}）` : ''}`,
+        description: t.description,
+        deliverableSpec: t.deliverableSpec,
+        estimatedLoad: t.estimatedLoad,
+        due: new Date(nowMs + totalDays * frac * DAY).toISOString(),
+        dependsOn: [],
+      };
+    });
     const milestones = generateMilestones(finalDdl);
     const draftId = uuid();
     const draft = {
@@ -503,11 +576,14 @@ const routes = [
   ['GET', /^\/v1\/templates$/, () => [200, { templates: TEMPLATES }]],
 
   ['POST', /^\/v1\/assignments\/from-template$/, ({ user, body }) => {
-    const { templateId, finalDdl, groupId, memberCount, title, requirementsText } = body;
+    const { templateId, finalDdl, groupId, memberCount, taskCount, title, requirementsText } = body;
     if (!templateId || !finalDdl || !groupId) return [400, { error: 'templateId/finalDdl/groupId 必填' }];
     if (!Number.isFinite(Date.parse(finalDdl)) || Date.parse(finalDdl) <= Date.now()) return [400, { error: 'finalDdl 必须晚于当前时间' }];
     if (memberCount !== undefined && (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > 8)) {
       return [400, { error: 'memberCount 必须为 1–8 整数' }];
+    }
+    if (taskCount !== undefined && (!Number.isInteger(taskCount) || taskCount < 2 || taskCount > 12)) {
+      return [400, { error: 'taskCount 必须为 2–12 整数' }];
     }
     const tpl = TEMPLATES.find((t) => t.id === templateId);
     if (!tpl) return [404, { error: 'template not found' }];
@@ -516,7 +592,7 @@ const routes = [
     if (!g.members.has(user.userId)) return [403, { error: 'not a group member' }];
     const draft = templateDraft({
       title: title || tpl.name, requirementsText: requirementsText || '',
-      finalDdl, memberCount: memberCount || 4,
+      finalDdl, memberCount: memberCount || 4, taskCount,
     });
     db.drafts.set(draft.draftId, draft);
     db.draftGroups.set(draft.draftId, groupId);
@@ -663,6 +739,9 @@ const routes = [
     const t = db.tasks.get(m[0]);
     if (!t) return [404, { error: 'task not found' }];
     const a = db.assignments.get(t.assignmentId);
+    // F21 审核是组长职权：组员端连入口都不给，服务端同样拒绝（decisions #27，原 x-prd-gap 已收口）
+    const g = db.groups.get(a.groupId);
+    if (!g || g.ownerId !== user.userId) return [403, { error: 'only leader can review' }];
     if (body.action === 'reject' && !body.reason) return [400, { error: 'reject requires reason' }];
     const type = body.action === 'approve' ? 'approve' : 'reject';
     if (!['approve', 'reject'].includes(body.action)) return [400, { error: 'action must be approve|reject' }];
@@ -704,6 +783,20 @@ const routes = [
       groupId: a.groupId, assignmentId: a.id, type: 'comment', actorId: user.userId,
       objectRef: { kind: 'comment', id }, payload: { taskId: t.id, mentions: body.mentions || [] },
     });
+    // 任务被他人评论：负责人收到站内通知；未认领的任务交给组长。自己评论自己的任务不通知。
+    const recipient = t.assigneeId || db.groups.get(a.groupId)?.ownerId;
+    if (recipient && recipient !== user.userId) {
+      void notifyB({
+        eventId: id,
+        kind: 'comment',
+        recipients: [recipient],
+        assignmentId: a.id,
+        taskId: t.id,
+        taskTitle: t.title,
+        actor: db.profiles.get(user.userId)?.name || user.userId,
+        text: String(body.body || '').slice(0, 500),
+      });
+    }
     return [201, cm];
   }],
 
@@ -1020,6 +1113,28 @@ const routes = [
     if (status) ts = ts.filter((t) => t.status === status);
     if (dueBefore) ts = ts.filter((t) => Date.parse(t.due) < Date.parse(dueBefore));
     return [200, { tasks: ts.map(({ assigneeId, ...rest }) => ({ ...rest, assignee: assigneeId })) }];
+  }, { internal: true }],
+
+  // B 调度器在截止前发现任务仍无人认领时调用；成员校验与「已被认领」冲突都由 A 收口。
+  ['POST', /^\/v1\/internal\/tasks\/([^/]+)\/auto-assign$/, ({ m, body }) => {
+    const t = db.tasks.get(m[0]);
+    if (!t) return [404, { error: 'task not found' }];
+    const a = db.assignments.get(t.assignmentId);
+    if (!a) return [404, { error: 'assignment not found' }];
+    const assigneeId = body && body.assigneeId;
+    if (typeof assigneeId !== 'string' || !assigneeId) return [400, { error: 'assigneeId 必填' }];
+    if (!isMember(a.groupId, assigneeId)) return [403, { error: 'assignee not a group member' }];
+    if (t.assigneeId) return [409, { error: 'already claimed', assigneeId: t.assigneeId }];
+    if (t.status !== 'todo') return [409, { error: 'task not claimable' }];
+    t.assigneeId = assigneeId;
+    writeEvent({
+      groupId: a.groupId, assignmentId: a.id, type: 'reassign', actorId: 'system',
+      objectRef: { kind: 'task', id: t.id }, payload: { from: null, to: assigneeId, auto: true },
+    });
+    return [200, {
+      id: t.id, assigneeId, status: t.status, title: t.title,
+      assigneeName: db.profiles.get(assigneeId)?.name || null,
+    }];
   }, { internal: true }],
 
   ['POST', /^\/v1\/internal\/schedule\/refresh$/, () => [200, { ok: true }], { internal: true }],

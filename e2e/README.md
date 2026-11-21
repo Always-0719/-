@@ -26,7 +26,7 @@ E2E_TARGET=staging A_BASE_URL=http://… B_BASE_URL=http://… C_BASE_URL=http:/
 | --- | --- | --- |
 | taskdraft.v1.schema.json | B | TaskDraft v1 形状与规则（draft-07，`additionalProperties:false`） |
 | event.v1.schema.json | C | Event v1：18 类枚举 + 8 字段 wire 形状 + 逐类载荷约定 |
-| openapi.v1.yaml | 三线会签 | 66 条 operation = mock 56 + 真 B 独占 10；逐条标 `x-owner` / `x-implemented-by`；15 条无契约来源的 A 端点标 `x-provisional: true` 并写明理由 |
+| openapi.v1.yaml | 三线会签 | 69 条 operation = mock 58 + 真 B 独占 11；逐条标 `x-owner` / `x-implemented-by`；17 条无契约来源的 A 端点标 `x-provisional: true` 并写明理由 |
 
 Event 类型表有三处副本：schema enum、`lib/ledger.js`、A 原型 `TYPE_LABEL`。`ledger.js` 直接读 schema（不再自带副本）；A 原型以 `file://` 自包含打开、无法跨源 import JSON，故保留标签副本。三处逐字一致由 `contracts.test.js` 锁定，真 B 的实际写入类型也必须落在 enum 内。
 
@@ -38,17 +38,19 @@ Event 类型表有三处副本：schema enum、`lib/ledger.js`、A 原型 `TYPE_
 | lib/http.js | 带 token 的 fetch 封装（10s 超时） |
 | lib/ledger.js | 事件计数对账、子序列断言、Event schema v1 形状校验（类型表读 canonical schema） |
 | lib/route-inventory.js | 静态抽取 mock 路由表 / 真 B 路由 / OpenAPI operation，供契约一致性测试比对 |
-| mock/server.js | A/B/C 冻结契约 in-memory 实现（状态机/打回理由/快照/幂等账本），56 条路由 |
+| mock/server.js | A/B/C 冻结契约 in-memory 实现（状态机/打回理由/快照/幂等账本），58 条路由 |
 | golden-path.test.js | 门 1 黄金路径：建组→邀请确认→AI 拆解→编辑 commit→认领(409)→交付物 v1→提交→打回(400/200)→v2→通过→评论→强制提交 400→其余完成→统一提交→账本对账+子序列 |
 | contract-smoke.test.js | TaskDraft v1 形状与规则、看板四列、Event 形状、writeEvent 幂等 |
-| contracts.test.js | 契约一致性（7 条静态测试）：端点集合双向 diff=0、owner/实现落点一致、15 条 provisional 齐全且有理由、Event 类型表三处一致、schema 字段清单与 assertEventShape 一致、实际写入类型 ⊆ enum、外部 `$ref` 不悬空 |
+| contracts.test.js | 契约一致性（7 条静态测试）：端点集合双向 diff=0、owner/实现落点一致、17 条 provisional 齐全且有理由、Event 类型表三处一致、schema 字段清单与 assertEventShape 一致、实际写入类型 ⊆ enum、外部 `$ref` 不悬空 |
 | gate2-extended.test.js | 门 2：互评(F26)/导出(F27) 已接真，mock 与 staging 都跑；B 两条（提醒触发/去重/quota 降级、黄牌分级/中性文案/入账）仅 staging（真 B）运行，纯 mock 自动条件 skip |
+| group-delete.test.js | 删组：组长 only(403)/不存在(404)、级联清空组下作业与任务、账本 append-only 不动、B 运行态清理与删后不再产提醒（B 段仅 staging） |
+| task-count.test.js | 任务分配数量：from-template 2/5/9/12 条精确生成且 commit 后看板条数一致、ai-draft 按条数拆解、越界/非整数两端点 400、不传时沿用模板 4 条（mock 与 staging 都跑） |
 
 ## 与集成门的对应
 
 - 门 1（第 3 周末）：`npm test` 全绿 + 对账 diff=0 是签核前置条件。
 - 门 2（第 5 周末）：互评/导出已解除 skip；B 段经 `POST /v1/internal/schedule/tick` 确定性触发，不等 60s 定时扫描，接真 A/C 后需对真 A/C 重跑。
-- 实测计数（2026-11-21，含 7 条静态契约测试）：**纯 mock 50 用例 48 pass / 2 条件 skip / 0 fail**；**staging（真 B + mock A/C）50 用例 50 pass / 0 skip / 0 fail**。
+- 实测计数（2026-11-21，含 7 条静态契约测试）：**纯 mock 57 用例 53 pass / 4 条件 skip / 0 fail**；**staging（真 B + mock A/C）57 用例 57 pass / 0 skip / 0 fail**。
 - mock 与 staging 跑同一套测试；staging 红而 mock 绿 = mock 失真，修 mock 或修服务，不允许改测试迁就。
 
 ## 已知契约缺口（待第 1 周 / v1.1 三线会签）

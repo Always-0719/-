@@ -14,7 +14,9 @@ const b = bRoutes();
 const mockSet = new Set(mock.map(key));
 const bSet = new Set(b.map(key));
 
-// 会签清单 §2 的 14 条 + approve（A-PRD F2 有功能要求但 §5.1 未定义端点，原清单漏计）。
+// 会签清单 §2 的 14 条 + approve（A-PRD F2 有功能要求但 §5.1 未定义端点，原清单漏计）
+// + DELETE /v1/groups/{gid}（删组，本轮为实际用户需求新发明，待三线会签追认，decisions #25）
+// + POST /v1/internal/tasks/{tid}/auto-assign（截止前自动分配，实际用户需求新增，decisions #31）。
 const PROVISIONAL = [
   'GET /v1/users',
   'POST /v1/demo/reset',
@@ -31,6 +33,8 @@ const PROVISIONAL = [
   'GET /v1/tasks/{}',
   'PUT /v1/comments/{}',
   'GET /v1/assignments/{}/final-submissions',
+  'DELETE /v1/groups/{}',
+  'POST /v1/internal/tasks/{}/auto-assign',
 ];
 
 test('OpenAPI 端点集合 == mock ∪ 真 B（双向 diff 为 0）', () => {
@@ -41,7 +45,7 @@ test('OpenAPI 端点集合 == mock ∪ 真 B（双向 diff 为 0）', () => {
   const extra = declared.filter((k) => !union.has(k));
   assert.deepEqual(missing, [], `实现里有但 OpenAPI 漏写：\n  ${missing.join('\n  ')}`);
   assert.deepEqual(extra, [], `OpenAPI 写了但无实现：\n  ${extra.join('\n  ')}`);
-  assert.equal(declared.length, 66, `端点总数应为 66（mock 56 + 真 B 独占 10），实际 ${declared.length}`);
+  assert.equal(declared.length, 69, `端点总数应为 69（mock 58 + 真 B 独占 11），实际 ${declared.length}`);
 });
 
 test('每条 operation 标了 x-owner / x-implemented-by，且落点与实现一致', () => {
@@ -58,7 +62,7 @@ test('每条 operation 标了 x-owner / x-implemented-by，且落点与实现一
   assert.deepEqual(bad, [], `落点标记与实现不符：\n  ${bad.join('\n  ')}`);
 });
 
-test('15 条 provisional 齐全、逐条有非空理由，且没有多标', () => {
+test('17 条 provisional 齐全、逐条有非空理由，且没有多标', () => {
   const marked = ops.filter((o) => o.provisional).map((o) => `${o.method} ${o.normalized}`);
   assert.deepEqual(marked.slice().sort(), PROVISIONAL.slice().sort(), 'provisional 集合与会签清单不一致');
   const noReason = ops.filter((o) => o.provisional && !o.provisionalReason).map((o) => `${o.method} ${o.path}`);

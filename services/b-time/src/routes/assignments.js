@@ -3,6 +3,7 @@ import { validateTaskDraft } from '../core/taskdraft-validator.js';
 import { createAiOrchestrator } from '../core/ai-orchestrator.js';
 import { providerFromEnv } from '../core/ai-provider.js';
 import { getGroup, tasksFromDraft, listTasks } from '../deps/a-client.js';
+import { checkTaskCount } from '../core/task-splitter.js';
 
 async function assertLeader(c, groupId) {
   const g = await getGroup(groupId, c.token);
@@ -37,7 +38,7 @@ export function registerAssignments({ route, db, orchestrator }) {
   };
 
   route('POST', '/v1/assignments/ai-draft', async (c) => {
-    const { requirementsText, memberCount, finalDdl, groupId } = c.body || {};
+    const { requirementsText, memberCount, taskCount, finalDdl, groupId } = c.body || {};
     if (typeof requirementsText !== 'string') return { status: 400, body: { error: 'requirementsText 必填字符串' } };
     if (requirementsText.length > 5000) return { status: 400, body: { error: 'text too long' } };
     if (!groupId || !Number.isFinite(Date.parse(finalDdl)) || Date.parse(finalDdl) <= Date.now()) {
@@ -46,12 +47,14 @@ export function registerAssignments({ route, db, orchestrator }) {
     if (memberCount !== undefined && (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > 8)) {
       return { status: 400, body: { error: 'memberCount 必须为 1–8 整数' } };
     }
+    const tc = checkTaskCount(taskCount);
+    if (!tc.ok) return { status: 400, body: { error: tc.error } };
     if (rateLimited(c.uid)) return { status: 429, body: { error: 'ai-draft 限频：每分钟最多 5 次' } };
     const lead = await assertLeader(c, groupId);
     if (lead.denied) return lead.denied;
 
     const result = await ai.run({
-      groupId, requirementsText, memberCount, finalDdl,
+      groupId, requirementsText, memberCount, taskCount: tc.value, finalDdl,
       nicknames: nicknamesOf(lead.group),
     });
     const now = new Date().toISOString();

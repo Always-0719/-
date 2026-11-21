@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { sanitizeText } from './sanitizer.js';
 import { validateTaskDraft } from './taskdraft-validator.js';
 import { buildTemplateDraft } from '../routes/templates.js';
+import { resizeTasks } from './task-splitter.js';
 
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
@@ -31,9 +32,10 @@ export function createAiOrchestrator({ db, provider, timeoutMs = 30000, maxCalls
   const cachePut = db.prepare('INSERT OR REPLACE INTO ai_cache (hash, draft_json, created_at) VALUES (?, ?, ?)');
 
   return {
-    async run({ groupId, requirementsText, memberCount, finalDdl, nicknames = [] }) {
+    async run({ groupId, requirementsText, memberCount, taskCount, finalDdl, nicknames = [] }) {
       const { text, hits } = sanitizeText(requirementsText, { nicknames });
-      const hash = crypto.createHash('sha256').update(`${text}|${finalDdl}|${memberCount || 4}`).digest('hex');
+      // taskCount 进哈希：同一份要求拆 3 条与拆 8 条是两份草稿，不能互相命中缓存
+      const hash = crypto.createHash('sha256').update(`${text}|${finalDdl}|${memberCount || 4}|${taskCount ?? ''}`).digest('hex');
       const newId = () => `d-${crypto.randomUUID()}`;
 
       const cached = cacheGet.get(hash);
@@ -49,6 +51,7 @@ export function createAiOrchestrator({ db, provider, timeoutMs = 30000, maxCalls
           finalDdl,
           title: 'AI 拆解作业（降级模板）',
           requirementsText: text,
+          taskCount,
         }),
         degraded: true,
         degradedReason: reason,
@@ -62,7 +65,7 @@ export function createAiOrchestrator({ db, provider, timeoutMs = 30000, maxCalls
         bumpStmt.run(groupId, day, 1, 0);
         try {
           const result = await withTimeout(
-            provider.generate({ text, memberCount, finalDdl, signal: AbortSignal.timeout(timeoutMs) }),
+            provider.generate({ text, memberCount, taskCount, finalDdl, signal: AbortSignal.timeout(timeoutMs) }),
             timeoutMs,
           );
           bumpStmt.run(groupId, day, 0, Number(result.tokens) || 0);
@@ -71,6 +74,10 @@ export function createAiOrchestrator({ db, provider, timeoutMs = 30000, maxCalls
             draftId: newId(),
             assignment: { ...result.draft.assignment, requirementsText: text, finalDdl },
           };
+          // 真 provider 未必守数量约定：不合规就本地补齐/合并到精确条数，再校验
+          if (taskCount != null && Array.isArray(draft.tasks) && draft.tasks.length !== taskCount) {
+            draft.tasks = resizeTasks(draft.tasks, taskCount, { finalDdl });
+          }
           const check = validateTaskDraft(draft);
           if (check.ok) {
             cachePut.run(hash, JSON.stringify(draft), new Date().toISOString());

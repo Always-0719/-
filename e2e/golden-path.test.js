@@ -65,6 +65,16 @@ test('黄金路径：建组→邀请→AI 拆解→commit→认领→提交→�
     const dv1 = await req('a', 'POST', `/v1/tasks/${ctx.t1}/deliverables`, { token: ctx.m2, body: { url: 'https://docs.qq.com/doc/v1', title: '问卷初稿', type: 'tencent-doc' } });
     assert.equal(dv1.status, 201); assert.equal(dv1.body.version, 1); bump('deliverable_update');
     assert.equal((await req('a', 'POST', `/v1/tasks/${ctx.t1}/submit`, { token: ctx.m2 })).status, 200); bump('submit');
+    // F21 审核是组长职权（decisions #27）：组员与组外一律 403，且任务状态不受影响
+    // 组外用种子身份 u5（许愿）—— 不在本组，且不新增演示身份污染目录。
+    const outsider = await req('a', 'POST', '/v1/auth/wechat-login', { body: { code: 'wx_demo_5' } });
+    assert.equal(outsider.status, 200);
+    for (const token of [ctx.m2, outsider.body.token]) {
+      const denied = await req('a', 'POST', `/v1/tasks/${ctx.t1}/reviews`, { token, body: { action: 'approve' } });
+      assert.equal(denied.status, 403, '非组长不得审核');
+      assert.match(denied.body.error, /leader/);
+    }
+    assert.equal((await req('a', 'GET', `/v1/tasks/${ctx.t1}`, { token: ctx.m2 })).body.status, 'review');
     const bad = await req('a', 'POST', `/v1/tasks/${ctx.t1}/reviews`, { token: ctx.leader, body: { action: 'reject' } });
     assert.equal(bad.status, 400);
     const rej = await req('a', 'POST', `/v1/tasks/${ctx.t1}/reviews`, { token: ctx.leader, body: { action: 'reject', reason: '样本量不足' } });

@@ -38,7 +38,7 @@ function setup({ tasks = [], members = ['u-leader', 'u-a@x.com', 'u-member'], em
 }
 const task = (id, due, assignee = null) => ({ id, assignmentId: 'a1', due: iso(due), status: 'todo', assignee, title: `任务${id}` });
 
-test('tick 一遍：job→站内信落库 + outbox 邮件；收件人规则（认领人/未认领→组长/里程碑→全员）', async () => {
+test('tick 一遍：job→站内信落库 + outbox 邮件；未认领催全组、已认领催提交', async () => {
   const due = T0 + 47 * HOUR;
   const s = setup({ tasks: [task('t1', due, 'u-a@x.com'), task('t2', due)] });
   s.seed('a1', due);
@@ -46,20 +46,26 @@ test('tick 一遍：job→站内信落库 + outbox 邮件；收件人规则（�
   assert.equal(r.created, 3);
   assert.equal(r.dispatched.sent, 3);
   const notes = s.notes();
-  assert.equal(notes.length, 5);
+  assert.equal(notes.length, 7);
   const byJob = {};
   for (const n of notes) (byJob[n.object_id] ||= []).push(n.user_id);
   assert.deepEqual(byJob['t1'], ['u-a@x.com']);
-  assert.deepEqual(byJob['t2'], ['u-leader']);
+  assert.deepEqual(byJob['t2'].sort(), ['u-a@x.com', 'u-leader', 'u-member']);
   assert.deepEqual(byJob['ms-a1'].sort(), ['u-a@x.com', 'u-leader', 'u-member']);
   for (const n of notes) {
     assert.equal(n.type, 'reminder');
     assert.ok(n.title.startsWith('48h 提醒'));
     assert.ok(n.job_id);
   }
+  const t1Note = notes.find((n) => n.object_id === 't1');
+  const t2Note = notes.find((n) => n.object_id === 't2');
+  assert.match(t1Note.title, /提交任务/);
+  assert.match(t1Note.body, /按时提交成果/);
+  assert.match(t2Note.title, /认领任务/);
+  assert.match(t2Note.body, /尽快认领/);
   const mails = readOutbox(s.dir);
-  assert.equal(mails.length, 2);
-  assert.deepEqual(mails.map(m => m.to).sort(), ['a@x.com', 'a@x.com']);
+  assert.equal(mails.length, 3);
+  assert.deepEqual(mails.map(m => m.to).sort(), ['a@x.com', 'a@x.com', 'a@x.com']);
   for (const j of s.jobs()) { assert.equal(j.status, 'sent'); assert.ok(j.sent_at); assert.equal(j.attempts, 1); }
 });
 

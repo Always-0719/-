@@ -12,17 +12,17 @@ const DAY = 86400000;
 const T0 = Date.parse('2026-11-21T00:00:00Z');
 const iso = (ms) => new Date(ms).toISOString();
 
-async function setup({ email } = {}) {
+async function setup({ email, listTasks: override } = {}) {
   const db = openDb(':memory:');
   migrate(db);
   let now = T0;
-  const listTasks = async ({ assignmentId }) => ({
+  const listTasks = override || (async ({ assignmentId }) => ({
     status: 200, body: { tasks: [{ id: 't1', assignmentId, due: iso(T0 + 47 * HOUR), status: 'todo', assignee: null, title: '任务t1' }] },
-  });
+  }));
   const dispatcher = createDispatcher({ db, now: () => now, listTasks, email: email || { async send() { throw new Error('no smtp in test'); } } });
   const scheduler = createScheduler({ db, now: () => now, listTasks, dispatcher });
   const app = createApp({ db });
-  registerInternal({ route: app.route, db, scheduler });
+  registerInternal({ route: app.route, db, scheduler, listTasks });
   registerNotifications({ route: app.route, db });
   const server = app.server;
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -123,6 +123,26 @@ test('notify mention：即时通知、eventId+user 判重、换 eventId 再发',
   } finally { s.close(); }
 });
 
+test('notify comment：任务被他人评论通知负责人', async () => {
+  const s = await setup();
+  try {
+    const r = await s.api('POST', '/v1/internal/notify', {
+      eventId: 'ev-c1', kind: 'comment', assignmentId: 'a1', taskId: 't1',
+      taskTitle: '问卷设计', recipients: ['u-m2'], text: '数据请再核对一下', actor: '组长小林',
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.created, 1);
+    const n = s.notes()[0];
+    assert.equal(n.type, 'comment');
+    assert.equal(n.title, '任务收到新评论');
+    assert.match(n.body, /组长小林/);
+    assert.match(n.body, /问卷设计/);
+    assert.match(n.body, /数据请再核对一下/);
+    assert.equal(n.object_kind, 'task');
+    assert.equal(n.object_id, 't1');
+  } finally { s.close(); }
+});
+
 test('notify reject：打回通知含理由、对象为任务', async () => {
   const s = await setup();
   try {
@@ -189,5 +209,95 @@ test('观测端点：reminder-jobs/yellow-cards/subscribe-quota 校验与形状 
     assert.equal(q.body.quota.remaining, 3);
     assert.equal(q.body.quota.openid, 'o-a');
     assert.ok(q.body.quota.collectedAt);
+  } finally { s.close(); }
+});
+
+// 删组级联（decisions #25）：A 删组前先打此端点，否则 scheduler.tick 仍按 assignments 物化里程碑提醒，
+// 向已不存在的组持续发通知。审计表（ai_usage / ai_draft_log）是成本与埋点历史，必须保留。
+const seedGroupRuntime = (db, at) => {
+  db.prepare(`INSERT INTO yellow_cards (id, assignment_id, member_id, streak, level) VALUES ('yc1', 'a1', 'u-m2', 2, 2)`).run();
+  db.prepare(`INSERT INTO drafts (id, group_id, payload, status, created_by, source, created_at, updated_at)
+    VALUES ('d1', 'g1', '{}', 'preview', 'u-a@x.com', 'ai', ?, ?)`).run(at, at);
+  db.prepare(`INSERT INTO ai_usage (group_id, day, calls, tokens) VALUES ('g1', '2026-11-21', 2, 1200)`).run();
+  db.prepare(`INSERT INTO ai_draft_log (id, group_id, draft_id, degraded, cached, created_at) VALUES ('adl1', 'g1', 'd1', 0, 0, ?)`).run(at);
+  const note = db.prepare(`INSERT INTO notifications (id, user_id, type, title, body, object_kind, object_id, created_at)
+    VALUES (?, 'u-m2', ?, 't', 'b', ?, ?, ?)`);
+  return (id, type, kind, oid) => note.run(id, type, kind, oid, at);
+};
+const countOf = (db, table, where = '') => db.prepare(`SELECT COUNT(*) n FROM ${table} ${where}`).get().n;
+
+test('删组级联：清作业/里程碑/job/黄牌/草稿与三类引用通知，保留审计表与他组数据，删后 tick 不再产提醒', async () => {
+  // t2 due 在 10 天后 → 不进任何提醒窗口，只存在于 A 现值：验证通知清理不只依赖 reminder_jobs
+  const s = await setup({
+    listTasks: async ({ assignmentId }) => ({
+      status: 200,
+      body: {
+        tasks: [
+          { id: 't1', assignmentId, due: iso(T0 + 47 * HOUR), status: 'todo', assignee: null, title: '任务t1' },
+          { id: 't2', assignmentId, due: iso(T0 + 10 * DAY), status: 'todo', assignee: null, title: '任务t2' },
+        ],
+      },
+    }),
+  });
+  try {
+    await s.scheduler.tick();
+    assert.equal(s.jobs().length, 2); // ms-a1 与 t1 各一个 48h 边界
+    const note = seedGroupRuntime(s.db, iso(T0));
+    note('n-a', 'reminder', 'assignment', 'a1');
+    note('n-ms', 'reminder', 'milestone', 'ms-a1');
+    note('n-t2', 'mention', 'task', 't2');
+    note('n-other', 'reminder', 'assignment', 'a-other');
+    const before = s.notes().length; // tick 已下发的提醒通知也在清理范围内
+
+    const r = await s.api('DELETE', '/v1/internal/groups/g1');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { ok: true, groupId: 'g1', assignments: 1, milestones: 1, jobs: 2, cards: 1, notifications: before - 1, drafts: 1 });
+    assert.equal(countOf(s.db, 'assignments'), 0);
+    assert.equal(countOf(s.db, 'milestones'), 0);
+    assert.equal(countOf(s.db, 'reminder_jobs'), 0);
+    assert.equal(countOf(s.db, 'yellow_cards'), 0);
+    assert.equal(countOf(s.db, 'drafts'), 0);
+    assert.deepEqual(s.notes().map(n => n.id), ['n-other']);
+    assert.equal(countOf(s.db, 'ai_usage'), 1);
+    assert.equal(countOf(s.db, 'ai_draft_log'), 1);
+
+    const after = await s.scheduler.tick();
+    assert.equal(after.created, 0, '删组后不得再物化任何提醒');
+    assert.equal(s.jobs().length, 0);
+
+    const again = await s.api('DELETE', '/v1/internal/groups/g1');
+    assert.equal(again.status, 200);
+    assert.deepEqual(again.body, { ok: true, groupId: 'g1', assignments: 0, milestones: 0, jobs: 0, cards: 0, notifications: 0, drafts: 0 });
+    assert.deepEqual(s.notes().map(n => n.id), ['n-other']);
+  } finally { s.close(); }
+});
+
+test('删组：A 不可用时退化为只清 B 已知引用，仍返回 200 不阻塞删组', async () => {
+  const s = await setup({ listTasks: async () => { throw new Error('A down'); } });
+  try {
+    await s.scheduler.tick();
+    const note = seedGroupRuntime(s.db, iso(T0));
+    note('n-a', 'reminder', 'assignment', 'a1');
+    note('n-t1', 'reject', 'task', 't1'); // 无 job（A 挂了扫不到任务）→ 属已知退化残留
+    const before = s.notes().length;
+    const r = await s.api('DELETE', '/v1/internal/groups/g1');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.assignments, 1);
+    assert.equal(r.body.jobs, 1); // 只有里程碑 job
+    assert.equal(r.body.notifications, before - 1);
+    assert.deepEqual(s.notes().map(n => n.id), ['n-t1']);
+    assert.equal(countOf(s.db, 'assignments'), 0);
+    assert.equal((await s.scheduler.tick()).created, 0);
+  } finally { s.close(); }
+});
+
+test('删组：B 侧无该组登记时返回全 0（A 先删或旧演示组）', async () => {
+  const s = await setup();
+  try {
+    const r = await s.api('DELETE', '/v1/internal/groups/g-none');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.assignments, 0);
+    assert.equal(r.body.notifications, 0);
+    assert.equal(countOf(s.db, 'assignments'), 1, '不得误删他组作业');
   } finally { s.close(); }
 });

@@ -6,7 +6,7 @@
 - 影响接口：无（对外契约不变）；部署形态变化需在集成门向三线通报。
 
 ## 2. 2026-11-21 · B 线 · 会话 mock 兼容解析（过渡）
-- 结论：SESSION_MODE=mock 时按 e2e mock 规则解析 tok-* → u-*，仅限开发；第 4 周接 A 真实会话中间件（JWT）。
+- 结论：SESSION_MODE=mock 时解析 e2e mock 签发的 `tok-<encodeURIComponent(userId)>`，token 直接携带 userId（种子演示身份的 code→userId 映射只有 mock 知道，B 不能从 code 推导），仅限开发；第 4 周接 A 真实会话中间件（JWT）。
 - 影响接口：全部需登录端点；会话中间件契约仍待第 1 周地基冻结，属已知缺口。
 
 ## 3. 2026-11-21 · B 线 · internal 端点鉴权（过渡）
@@ -81,7 +81,7 @@
 - 影响接口：无新增冻结端点；B 内部 scheduler + reminder_jobs 行为。
 
 ## 18. 2026-11-21 · B 线 · 通道下发与收件人规则（步骤 13）
-- 收件人：task→认领人，未认领→组长（assignments.created_by）；milestone→组成员快照（commit 时经 getGroup 落 members_json，迁移 005；A 挂兜底组长；成员后续变动不回填，MVP 取舍）。
+- 收件人：task→认领人，未认领→组长（assignments.created_by）；milestone→组成员快照（commit 时经 getGroup 落 members_json，迁移 005；A 挂兜底组长；成员后续变动不回填，MVP 取舍）。**#31 修订**：未认领任务提醒改为发给全组成员，并在截止前 24h 自动分配。
 - 邮箱可用性：mock email-login uid 形如 `u-<email>` 直接推导；微信登录无邮箱→仅站内。真实 A 的用户邮箱接口接真时再议（当前契约无）。
 - 站内必发：notifications 以 (job_id,user_id) UNIQUE + INSERT OR IGNORE 保证重试不重复（迁移 005）；邮件失败不阻塞站内落库。
 - 重试：reminder_jobs.attempts/last_error（迁移 005）；每 tick 重试 pending，3 次失败标 failed 不再重试；failed 时站内信已存在（提醒永不丢）。
@@ -145,6 +145,66 @@
 - live 冒烟（scratch db，mock A/C + 真 B + mock provider）：模板路径 28ms / AI 路径 22ms（draft→commit）；tick 14 job 全 sent；读 1 条通知后 openRate=0.025；6 作业 template 3 / ai 3 → 使用率 100%；重启后计数不变（幂等）。降级率 live=0（mock provider 不失败），降级入账由 ai.test.js HTTP 断言 + metrics.test.js 聚合断言锁定。
 - DoD 自查留档 `docs/b-line-dod.md`；demo 脚本 `docs/demo-script.md`。**录屏不可用披露**：本环境无录屏工具（浏览器截图亦受面板隐藏限制，见 #20），以带时长预算的分步 demo 脚本代替录屏，待集成门现场演示。
 - 结果：B 单测 116/116（+3 metrics）；混合 e2e 5 pass/2 skip、纯 mock 3 pass/4 skip 不变。冻结 8 端点不变。
+
+## 25. 2026-11-21 · A+B 跨线 · 删组级联（实际用户需求：以前创建的组要能删）
+- **缺口**：原型此前只有退组（`member_exit`）与转让，组长无法删除自己建的组。且 A 侧若只删组，B 的 `scheduler.tick` 仍按 `assignments` 表物化里程碑提醒 → 向已不存在的组持续发通知（僵尸提醒）；`recompute` 只 cancel 未发送 job，拦不住下一次物化。
+- **新增 2 端点**：A `DELETE /v1/groups/{gid}`（mock 实现，`x-provisional` 第 16 条，A-PRD §5.1 无来源）；B `DELETE /v1/internal/groups/{gid}`（B 自主 internal，无应用层鉴权同 #3）。契约门 66→68（mock 56→57、B 独占 10→11），provisional 15→16。
+- **调用顺序：先 B 后 A**。B 清通知要取全 task id（含从未进入提醒窗口的任务上的 @ / 打回通知），A 先删就取不到；A 不可用时 B 退化为只清 `reminder_jobs` 已知引用（单测锁定残留范围，仍返回 200 不阻塞删组）。
+- **B 清理范围**：`notifications`（按 `object_id` 覆盖作业 / 里程碑 / 任务三类引用）、`reminder_jobs`、`yellow_cards`、`milestones`、`assignments`、`drafts`；**保留 `ai_usage` / `ai_draft_log`**（成本与埋点审计历史，metrics 分母不因删组回退）。单事务执行，幂等（重复调用全 0）。
+- **A 清理范围**：`assignments`、`tasks`（含 deliverables）、`comments`、`taskMeta`、`milestones`、`finals`、`finalHistory`、`reviewWindows`、`peerReviews`、`evidenceTokens`（先取 windowId 再删窗口）、`reports`、`drafts`+`draftGroups`、`invites`、`joinRequests`、`joinMeta`、`groups`。
+- **账本 append-only 不动**：Event v1 冻结 18 类无 `group_delete`，与 `group_create` / `invite_create` / `transfer` 同批不入账；新增类型提会签（同 #15 的 `reminder_sent`）。删后无读端点可访问该组账本，e2e 改用 ingress 的 eventId 判重反向证明行仍在（重放删前事件 → 200 `duplicate:true`），并断言他组时间线条数不变（删组自身零写入）。
+- **前端**：组长 only 两个入口（首页组卡 ×／成员页危险区），确认弹窗回显真实后果计数（作业 / 任务 / 交付物版本 / 统一提交 / 待触发提醒 / 黄牌，另注明账本保留条数）。B 清理失败不阻塞 A 删除，进内存重试队列由 `refreshB` 探活成功后补清（不落 localStorage，遵守「前端不落业务数据」约定；跨刷新且 B 长期掉线需 B 恢复后重删）。
+- **结果**：B 单测 132/132（+3）；e2e 纯 mock 49 pass / 4 skip、staging **53 pass / 0 fail / 0 skip**（+3 删组，含「只删 A 会留僵尸提醒」的必要性回归）；契约门 7/7。
+- **待会签**：两个端点形状、`group_delete` 事件类型、internal 鉴权（#3）。
+
+## 26. 2026-11-21 · A+B 跨线 · 任务分配数量取代小组人数（实际用户需求，修订 #9）
+- **需求**：新建作业界面不再让用户填「小组人数」，改为必填「任务分配数量」，并**按用户填写的条数分配任务**。人数是组事实（A 侧已有），让用户重复填写既冗余又与真实成员数脱节；条数才是组长真正要决策的量。
+- **契约**：`ai-draft` 与 `from-template` 请求体新增可选 `taskCount`（integer 2–12）。**不新增端点**，契约门仍 68 条 / provisional 16 条。`memberCount` 保留为可选（旧调用方与提示词上下文），但不再决定任务数；两侧对 `taskCount` 同口径校验（越界/非整数 400）。
+- **精确条数算法**（`services/b-time/src/core/task-splitter.js`，纯函数）：多于模板任务数 → **拆分**，额外名额按 `estimatedLoad` 最大余数法配比，每片负载≥1，due 在原任务窗口内均分且末片落在原 due；少于 → **相邻合并**，标题/描述/交付规格全部保留、负载求和封顶 5、due 取组内最晚。两种操作后依赖都重接到存在的 key 且无环，`due ≤ finalDdl`，产物仍过 TaskDraft v1 校验（`additionalProperties:false`，内部临时字段不落 wire）。
+- **AI 路径**：`buildPrompt` 写明「恰好 N 个」；真 provider 不守约定时编排器本地补齐/合并到精确条数再校验；降级模板同样传 `taskCount`。**缓存哈希加入 taskCount**（同要求拆 3 条与拆 8 条是两份草稿，不得互相命中）。
+- **缺省行为不变**：不传 `taskCount` 时模板仍是 curated 4 条（#9）、AI 仍 `clamp(memberCount+1,2,4)`，既有 e2e/单测前提不漂移。
+- **前端**：向导用步进器（−／输入／＋，2–12 边界禁用）+ 快捷 chips（每人 1 个 / 每人 2 个 / 模板默认 4，按真实成员数算）+ 实时预览（说明将拆分还是合并、AI 降级也守数量）；输入即时同步预览与 chips 选中态，不整页重渲染以免丢焦点。默认值取当前小组成员数（夹在 2–12）。H5 `apps/web-h5/index.html` 同步改为 `task-count`。提交前校验失败 toast「请填写任务分配数量（2–12 整数）」。
+- **同批 UI 清理**：通知中心移除「黄牌文案口径（F19）」静态说明卡（内部口径不该给实际用户看），连带删除仅此处使用的 `.yc-preview` 样式；真实黄牌通知（本人版/组长版）照常显示。
+- **结果**：B 单测 **142/142**（+11：splitter 2–12 全模板矩阵、合并保内容、拆分保 due、编排器强制条数、缓存分键、HTTP 两端点）；e2e 纯 mock **53 pass / 4 skip / 0 fail**、staging **57 pass / 0 fail / 0 skip**（+4：条数精确落看板、AI 条数、越界 400、缺省 4 条）；契约门 7/7。
+- **待会签**：`taskCount` 字段与 2–12 上限（B-PRD F5/F6 未定义条数入参）；是否把「小组人数」彻底从契约移除（本轮保留兼容）。
+
+## 27. 2026-11-21 · A 线 · 审核仅该组组长（实际用户需求，收口 x-prd-gap）
+- **需求**：F21 审核（通过/打回）只对该小组组长开放，组员端不得出现该功能。
+- **前端（原型）**：组员端整个「审核」页签不渲染（不是禁用）；切换身份后仍停在审核页自动退回看板；任务详情与审核队列的通过/打回按钮加 `isLeader` 守卫，处理器兜底 toast「仅组长可审核」。
+- **服务端**：mock A `POST /v1/tasks/{tid}/reviews` 增加组长校验（`group.ownerId !== userId`）→ 403 `only leader can review`；组外同样 403。此前该端点无身份校验，契约里登记为 `x-prd-gap: 审核人身份未校验`。
+- **契约**：OpenAPI 移除该 `x-prd-gap`，描述改为「仅该组组长可调用」，补 `403 Forbidden` 响应；契约门仍 68 条操作 / 16 条 provisional（只补响应码，不新增端点）。
+- **测试**：golden-path 在任务进入 review 后断言组员 403、组外（种子身份 u5）403、任务状态保持 review；既有 e2e 审核调用本就全部用组长 token，无回归。
+- 影响接口：`POST /v1/tasks/{tid}/reviews` 权限语义收紧（403 响应已入契约）。
+
+## 28. 2026-11-21 · A 线 · 注册登录页 + 「提交」页签改为「贡献」（实际用户需求）
+- **注册/登录页**：登录页改为「登录 / 注册」双模式；注册 = 昵称（2–12 字）+ 邮箱 + 验证码（复用 email-code / email-login），成功后直接进入「我的小组」。切换模式不丢已填邮箱/昵称；微信一键登录与演示身份目录保留（登录模式）。真实环境的微信注册不在 MVP。
+- **契约**：不新增端点；`POST /v1/auth/email-login` 请求体新增可选 `name`——仅该 email 首次建档时作为昵称，已有账号登录忽略（mock 实现，decisions 登记为包装层补充）。验证码仍走既有 email-code 演示回显 + 60s 限频。
+- **贡献页签**：原「提交」页签更名「贡献」（key `submit`→`contrib`）。按成员卡片列出：任务内容（描述 / 交付规格，经 `GET /v1/tasks/{tid}` 进入页签时懒加载并缓存，空描述记入 tried 防轮询重取）、任务状态（未认领/待办/进行中/待审核/已完成/逾期）、最新交付物链接与版本数、打回理由；顶部完成度 / 交付版本数 / 参与成员 + 按负载的贡献占比色条；未认领任务单列一张卡。任务行点击仍打开详情与评论。
+- **保留组长提前提交**：统一提交卡与不可变快照原样保留，未全部完成时按钮显示「提前提交快照」，组长须填理由（强制提交），组员禁用；已提交后保留「再次提交」。
+- 影响接口：无新增端点；email-login 请求体新增可选 name。H5 端不在本轮范围。
+
+## 29. 2026-11-21 · A 线 · 设置页移除开发者卡片（实际用户需求）
+- **需求**：提醒与订阅设置里的「B 线运行指标」「服务地址」是开发/联调口径，用户端不应看到。
+- **前端**：`renderSettings` 删除两张卡片；`loadSettings` 不再请求 `/v1/internal/metrics`，`bState.metrics` 一并移除；通道偏好、微信订阅额度原样保留。
+- **影响接口**：无。`GET /v1/internal/metrics` 端点保留，供联调与运维观测。
+
+## 30. 2026-11-21 · A+B 跨线 · 任务被他人评论通知负责人（实际用户需求）
+- **需求**：任务被他人评论时，任务负责人收到通知；本人评论自己的任务不产生通知，保持其他功能不变。
+- **投递链路**：mock A 在 `POST /v1/tasks/{tid}/comments` 落库后，异步调用 B `POST /v1/internal/notify`，`kind=comment`、`eventId=评论 id`、`text=评论正文`、`taskTitle=任务标题`。收件人优先取任务负责人；任务未认领时取组长；评论者本人不在收件人内。B 不在线只重试一次并吞掉失败，评论与 A 主链路不回滚。
+- **B**：`internal/notify` 的 kind 增加 `comment`，站内信 type 记为 `comment`，标题「任务收到新评论」，正文含任务名、评论者和评论内容（截断 500 字）。迁移 `009_task_comment_notify.sql` 因 SQLite 无法改 CHECK 而重建 notifications 表，保留 job_id/event_id 与三个索引；迁移幂等由既有 runner 保证。
+- **前端**：通知中心新增绿色「任务评论」类型标签（11px），空态补充「任务评论」。仍走既有 2.5s 轮询与未读角标，不新增页面或入口。
+- **契约**：`/v1/internal/notify` 的 kind enum 扩为 `mention|reject|comment`，新增可选 `taskTitle`；端点总数仍 68、provisional 仍 16。评论端点描述补「通知任务负责人」。
+- **验证**：B 单测 143/143、契约门 7/7；临时端口（A 9787 / B 9788，独立内存库）端到端 1/1（负责人收到、评论者与自评不收到）；前端用注入通知核对标签与样式渲染。
+- **生效前置**：当前运行的 8787/8788 仍是旧进程，需重启 mock A 与 b-time 才能加载本改动并执行迁移 009（未在未获同意时重启演示进程）。
+
+## 31. 2026-11-21 · A+B 跨线 · 截止前自动分配 + 认领/提交催促（实际用户需求）
+- **需求**：任务到截止日期前仍无人认领时，自动随机分配给组员；同时用通知催促组员认领和提交。
+- **规则**：截止前 24 小时内、状态 `todo` 且无人认领的任务，由 B 调度器每 tick 挑一名组成员随机承接（成员快照取 commit 时的 `members_json`，缺失退化为组长）。已分配 / `review` / `done` / 已逾期任务不参与；A 侧校验成员身份，已被抢认返回 409 由 B 静默跳过。
+- **跨线链路**：A 新增 internal `POST /v1/internal/tasks/{tid}/auto-assign`（免鉴权，B → A），落 `reassign` 事件（actorId=system、payload.auto=true），返回任务标题与成员昵称。契约门 68→69（mock 57→58），provisional 16→17，待 v1.1 会签。
+- **B 通知**：自动分配成功后给本人发「任务已自动分配给你」（含截止剩余小时与提交引导），给组长发「任务已自动分配」；`type=auto_assign`，`event_id=auto-assign:<taskId>`，迁移 `010_auto_assign_notify.sql` 重建 notifications 的 CHECK 并保留 job_id/event_id 与三个索引。
+- **原有提醒增强**：未认领任务的 48h/24h/overdue 提醒收件人由「仅组长」改为全组成员，标题改为「认领任务」，正文明确请组员认领并提交；已认领任务标题改为「提交任务」，正文明确请按时提交成果。里程碑提醒不变。
+- **前端**：通知中心新增「自动分配」类型标签与空态说明；时间页与贡献页未认领区注明「截止前 24 小时自动分配」；手动检查 toast 增加自动分配数量；事件时间线中 system 显示为「系统」。
+- **验证**：B 单测 147/147、契约门 7/7；隔离端口（A 8797 / B 8798）端到端验证自动分配、通知与看板归属变化；原型经本地静态服务指向隔离端口后，通知中心可见「自动分配」徽章与提醒文案，看板「资料调研与大纲」显示负责人苏禾。2026-11-21 已按用户确认重启 8787/8788 演示环境并执行迁移 010，演示数据已重置为种子状态。
 
 ## 15. 待登记 / 契约缺口归档（步骤 19 汇总，供 v1.1 三线会签）
 - **fromDraft 无幂等键**（#10）：B 以 aid=`a-<draftId>` 确定性派生 + 重试前查 A internal/tasks 判存兜底；A 侧重复建任务风险待 v1.1 加幂等键。

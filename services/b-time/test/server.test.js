@@ -20,7 +20,7 @@ test('服务骨架：healthz 200、未知路由 404、受保护路由未登录 4
   assert.equal((await fetch(`${base}/nope`)).status, 404);
   assert.equal((await fetch(`${base}/v1/ping`)).status, 401);
 
-  const ok = await fetch(`${base}/v1/ping`, { headers: { authorization: 'Bearer tok-alice' } });
+  const ok = await fetch(`${base}/v1/ping`, { headers: { authorization: 'Bearer tok-u-alice' } });
   assert.equal(ok.status, 200);
   assert.deepEqual(await ok.json(), { uid: 'u-alice' });
 

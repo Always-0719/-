@@ -42,8 +42,8 @@
 
   <label>最终截止（finalDdl）</label>
   <input id="ddl" type="datetime-local">
-  <label>小组人数</label>
-  <input id="member-count" type="number" min="1" max="8" value="4">
+  <label>任务分配数量（2–12，必填）</label>
+  <input id="task-count" type="number" min="2" max="12" step="1" value="4">
 
   <div id="pane-ai">
     <label>作业要求（粘贴老师的要求文本，送 AI 前自动脱敏）</label>
@@ -124,9 +124,9 @@ function commonBody() {
   if (!getGid()) { toast('请先选择/新建小组'); return null; }
   const ddlVal = $('ddl').value;
   if (!ddlVal) { toast('请选择最终截止'); return null; }
-  const memberCount = Number($('member-count').value);
-  if (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > 8) { toast('人数须为 1–8'); return null; }
-  return { groupId: getGid(), finalDdl: fromLocalInput(ddlVal), memberCount };
+  const taskCount = Number($('task-count').value);
+  if (!Number.isInteger(taskCount) || taskCount < 2 || taskCount > 12) { toast('任务分配数量须为 2–12 整数'); return null; }
+  return { groupId: getGid(), finalDdl: fromLocalInput(ddlVal), taskCount };
 }
 
 const gotoConfirm = (draftId) => { location.href = `/h5/confirm.html?draftId=${encodeURIComponent(draftId)}`; };

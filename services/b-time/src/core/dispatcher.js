@@ -20,7 +20,10 @@ export function createDispatcher({ db, now = () => Date.now(), email = emailFrom
     const a = getA.get(job.assignment_id);
     const leader = a.created_by;
     let members = [leader];
-    try { members = JSON.parse(a.members_json) || [leader]; } catch {}
+    try {
+      const snap = JSON.parse(a.members_json);
+      if (Array.isArray(snap) && snap.length) members = snap;
+    } catch {}
     let name = job.object_id, due = null, assignee = null;
     if (job.object_kind === 'milestone') {
       const m = getMs.get(job.object_id);
@@ -29,14 +32,32 @@ export function createDispatcher({ db, now = () => Date.now(), email = emailFrom
       const t = job.taskInfo;
       if (t) { name = t.title; due = t.due; assignee = t.assignee; }
     }
-    const recipients = job.object_kind === 'milestone' ? members : (assignee ? [assignee] : [leader]);
-    const kindLabel = job.object_kind === 'milestone' ? '里程碑' : '任务';
-    const title = `${LABEL[job.level]}：${kindLabel}「${name}」`;
     const dueText = due ? new Date(due).toISOString() : '（A 暂不可读，请上看板核对）';
+    const overdueDays = Math.floor((at - Date.parse(due || at)) / DAY) + 1;
+
+    if (job.object_kind === 'milestone') {
+      const title = `${LABEL[job.level]}：里程碑「${name}」`;
+      const body = job.level === 'overdue'
+        ? `截止 ${dueText}，已逾期第 ${overdueDays} 天。请尽快处理或联系组长调整计划。`
+        : `截止 ${dueText}。剩余不足 ${job.level === '48h' ? 48 : 24} 小时，请及时安排。`;
+      return { recipients: members, title, body };
+    }
+
+    // 未认领：催全组认领（原先只发给组长，等于把催办责任压在一个人身上）
+    if (!assignee) {
+      const title = `${LABEL[job.level]}：认领任务「${name}」`;
+      const body = job.level === 'overdue'
+        ? `任务「${name}」截止 ${dueText}，已逾期第 ${overdueDays} 天且仍无人认领。请组员尽快认领并提交成果。`
+        : `任务「${name}」截止 ${dueText}，目前仍无人认领。请组员尽快认领，并在截止前提交成果。`;
+      return { recipients: members, title, body };
+    }
+
+    // 已认领：明确催提交，避免提醒只说「请及时安排」
+    const title = `${LABEL[job.level]}：提交任务「${name}」`;
     const body = job.level === 'overdue'
-      ? `截止 ${dueText}，已逾期第 ${Math.floor((at - Date.parse(due || at)) / DAY) + 1} 天。请尽快处理或联系组长调整计划。`
-      : `截止 ${dueText}。剩余不足 ${job.level === '48h' ? 48 : 24} 小时，请及时安排。`;
-    return { recipients, title, body };
+      ? `任务「${name}」截止 ${dueText}，已逾期第 ${overdueDays} 天。请尽快提交成果，或联系组长调整计划。`
+      : `任务「${name}」由你负责，截止 ${dueText}，剩余不足 ${job.level === '48h' ? 48 : 24} 小时。请按时提交成果。`;
+    return { recipients: [assignee], title, body };
   }
 
   async function dispatchPending(at = now()) {

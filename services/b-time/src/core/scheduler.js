@@ -17,7 +17,7 @@ function occurrences(due, now) {
   return out;
 }
 
-export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, listTasks = aListTasks, dispatcher = null, yellowcards = null } = {}) {
+export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, listTasks = aListTasks, dispatcher = null, yellowcards = null, autoAssign = null } = {}) {
   if (tickMs > 60000) throw new Error('tickMs 必须 ≤60s（F16 触发误差 <5min）');
   const ins = db.prepare(`INSERT INTO reminder_jobs
     (id, object_kind, object_id, assignment_id, level, channel, fire_at, dedup_key, created_at)
@@ -40,36 +40,48 @@ export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, li
     return created;
   }
 
-  async function objectsOf(aid) {
+  async function scan(aid) {
     const objects = db.prepare('SELECT id, due FROM milestones WHERE assignment_id = ?')
       .all(aid).map(m => ({ kind: 'milestone', id: m.id, assignmentId: aid, due: m.due }));
+    let tasks = [];
     // A 不可用时跳过任务扫描，里程碑仍扫；下个 tick 自动补
     try {
       const r = await listTasks({ assignmentId: aid });
       if (r.status === 200) {
-        for (const t of r.body.tasks) {
+        tasks = r.body.tasks || [];
+        for (const t of tasks) {
           if (!SETTLED.has(t.status)) objects.push({ kind: 'task', id: t.id, assignmentId: aid, due: t.due });
         }
       }
     } catch {}
-    return objects;
+    return { objects, tasks };
   }
 
   async function tick(at = now()) {
     let created = 0;
+    const autoAssigned = [];
     for (const a of db.prepare('SELECT id FROM assignments').all()) {
-      created += materialize(await objectsOf(a.id), at);
+      const { objects, tasks } = await scan(a.id);
+      created += materialize(objects, at);
+      // 先补人再发提醒：24h 边界上仍未认领的任务自动落给组员，本 tick 的提醒即为提交催促
+      if (autoAssign) {
+        try {
+          autoAssigned.push(...await autoAssign.run({ assignmentId: a.id, tasks, at }));
+        } catch (e) {
+          console.error('[auto-assign]', e);
+        }
+      }
     }
     const dispatched = dispatcher ? await dispatcher.dispatchPending(at) : null;
     const yc = yellowcards ? await yellowcards.scan(at) : null;
-    return { at, created, dispatched, yellowcards: yc };
+    return { at, created, autoAssigned, dispatched, yellowcards: yc };
   }
 
   // refresh 语义：未发送（pending/failed）标 cancelled 后重算；同 key 的 cancelled 行被复活，
   // sent 行保持（该边界已提醒过）；历史 cancelled 留作队列审计
   async function recompute(aid, at = now()) {
     const cancelled = db.prepare("UPDATE reminder_jobs SET status = 'cancelled' WHERE assignment_id = ? AND status IN ('pending', 'failed')").run(aid).changes;
-    const created = materialize(await objectsOf(aid), at);
+    const created = materialize((await scan(aid)).objects, at);
     return { cancelled, created };
   }
 

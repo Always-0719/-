@@ -24,3 +24,8 @@ export function listTasks({ assignmentId, dueBefore, status } = {}) {
   if (status) q.set('status', status);
   return request('GET', `${baseA()}/v1/internal/tasks?${q}`);
 }
+
+export const autoAssignTask = ({ taskId, assigneeId }) =>
+  request('POST', `${baseA()}/v1/internal/tasks/${encodeURIComponent(taskId)}/auto-assign`, {
+    body: { assigneeId },
+  });

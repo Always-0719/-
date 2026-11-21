@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#4f46e5">
-  <title>协作层 · A 线原型</title>
+  <title>别鸽了 · 小组作业协作层（A+B 合并版）</title>
   <style>
 :root {
   --primary: #4f46e5;
@@ -12,7 +12,7 @@
   --primary-soft: #eef2ff;
   --ink: #1f2937;
   --ink-2: #4b5563;
-  --ink-3: #9ca3af;
+  --ink-3: #6b7280;
   --line: #e5e7eb;
   --bg: #f6f7fb;
   --surface: #ffffff;
@@ -138,12 +138,22 @@ a { color: var(--primary); }
 .group-card .meta { flex: 1; min-width: 0; }
 .group-card .meta strong { display: block; font-size: 14px; margin-bottom: 3px; }
 .group-card .meta span { color: var(--ink-3); font-size: 11px; }
+.group-card .del-x { width: 28px; height: 28px; flex: none; font-size: 15px; background: transparent; color: var(--ink-3); }
+.group-card .del-x:hover { background: #fef2f2; color: var(--danger); }
+.danger-zone { border-color: #fecaca; background: #fffbfb; }
+.danger-zone .block-title > span:first-child { color: var(--danger); }
+.del-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.del-fact { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; text-align: center; }
+.del-fact b { display: block; font-size: 17px; line-height: 1.2; color: var(--ink); }
+.del-fact span { font-size: 11px; color: var(--ink-3); }
+.del-warn { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 9px 11px; font-size: 12px; line-height: 1.55; color: #b91c1c; margin: 0 0 10px; }
+.del-note { font-size: 12px; color: var(--ink-2); line-height: 1.55; margin: 0 0 10px; }
 
 .avatar {
   width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center;
   color: #fff; font-size: 11px; font-weight: 600; flex: none; border: 2px solid #fff;
 }
-.avatar.sm { width: 22px; height: 22px; font-size: 10px; }
+.avatar.sm { width: 22px; height: 22px; font-size: 11px; }
 .avatar-stack { display: flex; }
 .avatar-stack .avatar + .avatar { margin-left: -7px; }
 
@@ -153,7 +163,7 @@ a { color: var(--primary); }
   padding: 11px 8px; text-align: center; box-shadow: var(--shadow);
 }
 .stat b { display: block; font-size: 19px; line-height: 1.2; color: var(--ink); }
-.stat span { font-size: 10px; color: var(--ink-3); }
+.stat span { font-size: 11px; color: var(--ink-3); }
 
 .tabs { display: flex; gap: 4px; background: #eaeef5; padding: 4px; border-radius: 12px; margin-bottom: 14px; }
 .tabs button {
@@ -175,7 +185,7 @@ a { color: var(--primary); }
 .board-col-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 10px; }
 .board-col-head strong { font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-.count { background: #fff; color: var(--ink-3); border-radius: 20px; padding: 1px 7px; font-size: 10px; }
+.count { background: #fff; color: var(--ink-3); border-radius: 20px; padding: 1px 7px; font-size: 11px; }
 .task-card {
   background: #fff; border: 1px solid var(--line); border-radius: 11px; padding: 11px;
   margin-bottom: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.04); cursor: pointer;
@@ -184,11 +194,11 @@ a { color: var(--primary); }
 .task-card.unclaimed { border-color: #c7d2fe; background: #fafaff; }
 .task-card .title { font-weight: 600; font-size: 13px; margin-bottom: 7px; line-height: 1.35; }
 .task-card .row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.task-card .due { font-size: 10px; color: var(--ink-3); }
+.task-card .due { font-size: 11px; color: var(--ink-3); }
 .task-card .due.overdue { color: var(--danger); font-weight: 600; }
 .tag {
   display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 6px;
-  font-size: 10px; font-weight: 600; background: var(--bg); color: var(--ink-2);
+  font-size: 11px; font-weight: 600; background: var(--bg); color: var(--ink-2);
 }
 .tag.rejected { background: #fee2e2; color: var(--danger); }
 .tag.claimed { background: #e0e7ff; color: var(--primary); }
@@ -202,13 +212,56 @@ a { color: var(--primary); }
 .field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--ink-2); }
 .field input, .field textarea, .field select {
   width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
-  background: #fff; outline: none; font-size: 14px;
+  background: #fff; outline: none; font-size: 16px;
 }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .field textarea { min-height: 80px; resize: vertical; }
-.field .hint { font-size: 10px; color: var(--ink-3); margin-top: 5px; }
+.field .hint { font-size: 11px; color: var(--ink-3); margin-top: 5px; }
 .inline-fields { display: flex; gap: 10px; }
 .inline-fields .field { flex: 1; }
+
+.req-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-size: 11px; font-weight: 700; }
+.count-stepper { display: flex; align-items: stretch; gap: 8px; }
+.count-stepper input { flex: 1; min-width: 0; text-align: center; font-size: 20px; font-weight: 700; color: var(--ink); }
+.count-stepper .step { width: 46px; flex: none; cursor: pointer; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink-2); font-size: 19px; font-weight: 700; line-height: 1; }
+.count-stepper .step:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.count-stepper .step:disabled { opacity: .35; cursor: not-allowed; }
+.count-chips { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.count-chip { cursor: pointer; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 11px; color: var(--ink-2); }
+.count-chip:hover { border-color: var(--primary); color: var(--primary); }
+.count-chip.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+.count-preview { margin-top: 8px; font-size: 11px; line-height: 1.55; color: var(--ink-2); background: var(--bg); border: 1px dashed var(--line); border-radius: 9px; padding: 7px 10px; }
+.count-preview b { color: var(--primary); font-size: 13px; }
+.count-preview.bad { border-color: #fecaca; background: #fef2f2; color: var(--danger); }
+.count-preview.bad b { color: var(--danger); }
+
+/* ---- 注册 / 登录页 ---- */
+.auth-card { padding: 17px; }
+.auth-foot { text-align: center; font-size: 11px; color: var(--ink-3); margin: 11px 0 0; line-height: 1.6; }
+
+/* ---- 贡献页签（逐人任务与交付） ---- */
+.contrib-head { display: flex; align-items: center; gap: 9px; }
+.contrib-head .avatar { flex: none; }
+.contrib-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.contrib-stats b { color: var(--ink); font-size: 11.5px; }
+.contrib-bar { height: 7px; border-radius: 999px; background: #eef0f5; overflow: hidden; display: flex; }
+.contrib-bar span { height: 100%; }
+.contrib-task { padding: 10px 0; border-bottom: 1px solid #f1f2f5; cursor: pointer; }
+.contrib-task:last-child { border-bottom: 0; }
+.contrib-task .ct-title { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; }
+.contrib-task .ct-title > span:nth-child(2) { flex: 1; min-width: 0; word-break: break-word; }
+.contrib-task .ct-desc { font-size: 11px; color: var(--ink-2); margin: 5px 0 0; white-space: pre-wrap; word-break: break-word; }
+.contrib-task .ct-spec { font-size: 11px; color: var(--ink-3); margin: 3px 0 0; word-break: break-word; }
+.contrib-task .ct-deliver { margin-top: 7px; }
+.contrib-task .ct-deliver .deliverable { margin: 0; }
+.contrib-task .ct-none { font-size: 11px; color: var(--ink-3); margin-top: 5px; }
+.contrib-task .st { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; flex: none; white-space: nowrap; }
+.contrib-task .st.done { background: #ecfdf5; color: var(--done); }
+.contrib-task .st.review { background: #fffbeb; color: var(--review); }
+.contrib-task .st.doing { background: #eff6ff; color: var(--doing); }
+.contrib-task .st.todo { background: #f3f4f6; color: var(--todo); }
+.contrib-task .st.unclaimed { background: #f5f3ff; color: #8b5cf6; }
+.contrib-task .st.overdue { background: #fef2f2; color: var(--danger); }
 
 .overlay {
   position: fixed; inset: 0; z-index: 60; background: rgba(17,24,39,.42);
@@ -243,7 +296,7 @@ a { color: var(--primary); }
 }
 .deliverable .info { flex: 1; min-width: 0; }
 .deliverable .info strong { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.deliverable .info span { font-size: 10px; color: var(--ink-3); }
+.deliverable .info span { font-size: 11px; color: var(--ink-3); }
 .deliverable old { text-decoration: line-through; opacity: .5; }
 
 .comment { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -274,7 +327,7 @@ a { color: var(--primary); }
 .event-item .ev-body { flex: 1; min-width: 0; }
 .event-item .ev-body b { font-size: 12px; }
 .event-item .ev-body div { font-size: 11px; color: var(--ink-3); word-break: break-all; }
-.event-item time { font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+.event-item time { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
 
 .snapshot-banner {
   background: linear-gradient(135deg, #ecfdf5, #f0fdf4); border: 1px solid #a7f3d0;
@@ -298,8 +351,6 @@ a { color: var(--primary); }
 .toast.success { background: #047857; }
 @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip { background: var(--primary-soft); color: var(--primary); border-radius: 20px; padding: 3px 9px; font-size: 11px; }
 .code-box {
   display: flex; align-items: center; justify-content: space-between; background: var(--primary-soft);
   border: 1px dashed #a5b4fc; border-radius: 12px; padding: 12px 14px; margin: 10px 0;
@@ -314,7 +365,87 @@ a { color: var(--primary); }
   padding: 5px 10px 5px 5px; display: flex; align-items: center; gap: 6px; font-size: 11px;
 }
 .user-switch button.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 10px; }
+kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+/* ---- B 线功能（模板/AI 拆解/DDL 倒推/提醒/订阅/黄牌）并入后的新增样式 ---- */
+.icon-btn { position: relative; }
+.nbadge {
+  position: absolute; top: -4px; right: -5px; min-width: 15px; height: 15px; padding: 0 4px;
+  background: var(--danger); color: #fff; border-radius: 9px; font-size: 10px; font-weight: 700;
+  display: grid; place-items: center; border: 1.5px solid #fff;
+}
+.asg-bar { display: flex; gap: 8px; align-items: center; }
+.asg-bar select {
+  flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; background: #fff; font-size: 13px;
+}
+.ntype { display: inline-flex; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; flex: none; }
+.ntype.reminder { background: #e0e7ff; color: var(--primary); }
+.ntype.mention { background: #dbeafe; color: #2563eb; }
+.ntype.comment { background: #dcfce7; color: #15803d; }
+.ntype.reject { background: #fee2e2; color: var(--danger); }
+.ntype.auto_assign { background: #fef3c7; color: #b45309; }
+.ntype.yellow_card_self, .ntype.yellow_card_leader { background: #fef9c3; color: #a16207; }
+.note-card.read { opacity: .62; }
+.note-card .note-body { font-size: 12px; color: var(--ink-2); margin: 7px 0; word-break: break-word; }
+.note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.tl-list { list-style: none; margin: 0; padding: 0; }
+.tl-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f1f2f5; }
+.tl-item:last-child { border-bottom: 0; }
+.tl-item .tl-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--done); }
+.tl-item.h24 .tl-dot { background: var(--danger); }
+.tl-item.h48 .tl-dot { background: var(--review); }
+.tl-item.overdue .tl-dot { background: var(--danger); box-shadow: 0 0 0 3px #fee2e2; }
+.tl-item .tl-name { font-size: 13px; font-weight: 600; }
+.tl-item.overdue .tl-name { color: var(--danger); }
+.phase-tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; margin-left: 6px; }
+.phase-tag.future { background: #ecfdf5; color: var(--done); }
+.phase-tag.h48 { background: #fffbeb; color: var(--review); }
+.phase-tag.h24, .phase-tag.overdue { background: #fef2f2; color: var(--danger); }
+.job-status { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; }
+.job-status.pending { background: var(--bg); color: var(--ink-2); }
+.job-status.sent { background: #ecfdf5; color: var(--done); }
+.job-status.failed { background: #fef2f2; color: var(--danger); }
+
+.draft-task { border: 1px solid var(--line); border-radius: 11px; padding: 11px; margin-bottom: 10px; background: #fff; }
+.draft-task .key { font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
+.draft-task .field { margin-bottom: 8px; }
+.draft-task .field label { font-size: 11px; margin-bottom: 3px; }
+.draft-task .field input, .draft-task .field select { padding: 7px 9px; font-size: 12px; }
+.ms-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.ms-row input[type="text"] { flex: 1.2; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 12px; }
+.ms-row input[type="datetime-local"] { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 6px; font-size: 11px; }
+.ms-row .icon-btn { width: 28px; height: 28px; font-size: 12px; flex: none; }
+/* iOS 聚焦 <16px 输入框会自动放大页面；紧凑编辑行仅在手机宽度下提升到 16px，桌面保留原密度 */
+@media (max-width: 520px) {
+  .draft-task .field input, .draft-task .field select,
+  .ms-row input[type="text"], .ms-row input[type="datetime-local"] { font-size: 16px; }
+}
+/* 触屏设备把高频点按目标放大到约 40px，减少误触；鼠标设备保持原有紧凑布局 */
+@media (pointer: coarse) {
+  .icon-btn { width: 40px; height: 40px; }
+  .close-x { width: 40px; height: 40px; }
+  .tabs button { min-height: 40px; }
+  .btn.sm { min-height: 38px; }
+  .ms-row .icon-btn { width: 36px; height: 36px; }
+  .mention-bar button { min-height: 32px; padding: 5px 11px; }
+}
+/* 键盘导航时显示清晰焦点环；鼠标点击不出现，避免干扰视觉 */
+.btn:focus-visible, .icon-btn:focus-visible, .tabs button:focus-visible,
+.link:focus-visible, .close-x:focus-visible, .group-card:focus-visible,
+.task-card:focus-visible, .contrib-task:focus-visible,
+.count-stepper .step:focus-visible, .mention-bar button:focus-visible {
+  outline: 2px solid var(--primary); outline-offset: 2px;
+}
+.sheet:focus, .dialog:focus { outline: none; }
+.errors-box {
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px;
+  padding: 10px 12px; font-size: 12px; margin-bottom: 12px; white-space: pre-line; word-break: break-all;
+}
+.chk { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 7px 0; }
+.chk input { width: 16px; height: 16px; accent-color: var(--primary); }
+.b-offline { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-bottom: 12px; }
 
 </style>
 </head>
@@ -325,15 +456,20 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     <div id="modal-root"></div>
   </div>
   <script>
-/* 协作层 · A 线最小可用原型
- * 覆盖 F1 / F2 / F9 / F12 / F13 / F21 / F22
- * 数据层：读写全部走 mock API，前端只留一份内存缓存，不再落 localStorage 业务数据；
- * 跨标签页同步由轮询承担（原型没有 WebSocket 通道）。
+/* 别鸽了 · 小组作业协作层（A+B 合并版，单文件完整作品）
+ * A 线：F1 登录 / F2 建组邀请 / F9 看板认领 / F12 交付物 / F13 评论 / F21 审核 / F22 统一提交
+ * B 线（并入 A）：F5 模板 / F6 AI 拆解 / F7 DDL 倒推 / F16 提醒 / F17 微信订阅 / F19 黄牌
+ * 数据层：A/C 契约走 mock API（默认 127.0.0.1:8787，?api= 可改）；
+ *         B 功能直连真 b-time 服务（默认 127.0.0.1:8788，?b= 可改）。
+ * 运行：终端 1 `cd e2e && npm run mock`；终端 2 `cd services/b-time && npm start`；浏览器打开本文件。
+ * 前端只留一份内存缓存，不落 localStorage 业务数据；跨标签页同步由轮询承担（原型没有 WebSocket 通道）。
  */
 (() => {
   'use strict';
 
-  const API = new URLSearchParams(location.search).get('api') || 'http://127.0.0.1:8787';
+  const PARAMS = new URLSearchParams(location.search);
+  const API = PARAMS.get('api') || 'http://127.0.0.1:8787';
+  const B_API = PARAMS.get('b') || 'http://127.0.0.1:8788';
   const SESSION_KEY = 'hackathon_a_session';
   const $ = (sel) => document.querySelector(sel);
   const STATUS = {
@@ -347,8 +483,8 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
   const TYPE_LABEL = {
     member_join: '成员加入', member_exit: '成员退出', claim: '认领任务', reassign: '转派任务',
     start: '开始任务', submit: '提交审核', reject: '审核打回', approve: '审核通过',
-    comment: '新增评论', deliverable_update: '提交交付物', ddl_change: 'DDL 变更',
-    final_submit: '统一提交', review_submit: '提交互评', yellow_card: '黄牌提醒',
+    comment: '新增评论', deliverable_update: '提交成果', ddl_change: '截止时间变更',
+    final_submit: '最终提交', review_submit: '提交互评', yellow_card: '逾期提醒',
     dispute_open: '发起申诉', dispute_resolve: '申诉裁定', contribution_adjust: '贡献调整',
     report_export: '报告导出'
   };
@@ -362,9 +498,17 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
   }
 
   let state = emptyState();
+  // B 侧（真 b-time）数据独立成块：B 服务掉线只降级 B 功能，不影响 A 主链路。
+  const bEmpty = () => ({ online: null, unread: 0, notifications: [], templates: null, quota: null, milestones: null, jobs: [], cards: [] });
+  let bState = bEmpty();
   let token = null;
-  const ui = { view: 'login', groupId: null, tab: 'board', taskId: null };
+  const ui = { view: 'login', groupId: null, tab: 'board', taskId: null, assignmentId: null, unreadOnly: false, authMode: 'login' };
   let modal = null;
+  // 登录/注册表单的暂存值：切换登录↔注册不丢已填邮箱与昵称（验证码不暂存）。
+  let authForm = { email: '', name: '' };
+  // 建作业向导与草稿确认页的本地编辑态（绑定 input 事件直写对象，轮询不重渲染这两个视图）
+  let wiz = null;
+  let draft = null, draftId = null, draftErrors = [];
   let emailCooldownUntil = 0;
   let apiError = '';
   let busy = false;
@@ -386,6 +530,25 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     return data;
   }
 
+  // B 直连：会话与 A 共用同一 mock token（b-time parseSession 兼容解析）。
+  // 返回 { data, headers }——AI 降级/缓存标记走响应头（TaskDraft v1 body 保持纯契约形状）。
+  async function bApi(method, path, body) {
+    const res = await fetch(B_API + path, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* 空响应体 */ }
+    if (!res.ok) {
+      const err = new Error((data && data.error) || ('HTTP ' + res.status));
+      err.status = res.status;
+      err.body = data;
+      throw err;
+    }
+    return { data, headers: res.headers };
+  }
+
   function saveSession() {
     try {
       if (token && state.session) localStorage.setItem(SESSION_KEY, JSON.stringify({ token, userId: state.session }));
@@ -401,8 +564,11 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
   }
 
   function dropSession() {
+    const users = state.users;
     token = null;
     state = emptyState();
+    state.users = users;
+    bState = bEmpty();
     saveSession();
   }
 
@@ -516,12 +682,47 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     state.deliverables = deliverables;
     state.events = events;
     state.pendingJoins = pending;
-    // 提交历史按时间倒序：renderSubmit 用 find 取「最新一条」。
+    // 提交历史按时间倒序：贡献页的 renderSnapshot 用 find 取「最新一条」。
     state.finalSubmissions = finals.sort((a, b) => b.createdAt - a.createdAt);
 
     // 评论按任务懒加载，刷新时只重取当前打开的那条任务，避免 N+1。
     if (modal && modal.type === 'task') await loadTaskDetail(modal.id, true);
     else state.comments = state.comments.filter((c) => tasks.some((t) => t.id === c.taskId));
+
+    await refreshB();
+  }
+
+  // B 侧刷新：任何失败只标记离线，绝不向上抛——A 主链路不被 B 掉线拖垮。
+  async function refreshB() {
+    if (!state.session) { bState = bEmpty(); return; }
+    try {
+      const r = await bApi('GET', '/v1/notifications?unread=1');
+      bState.online = true;
+      bState.unread = r.data.notifications.length;
+      if (purgeQueue.size) await drainPurgeQueue();
+      if (ui.view === 'notifications') {
+        const all = await bApi('GET', '/v1/notifications' + (ui.unreadOnly ? '?unread=1' : ''));
+        bState.notifications = all.data.notifications;
+      }
+      if (ui.view === 'group' && ui.tab === 'time') {
+        const a = selectedAssignment(ui.groupId);
+        if (a) {
+          // 旧演示作业未经 B commit，B 侧无里程碑、internal 两端点恒 404——2.5s 一轮的轮询
+          // 会把控制台刷成一片红。commit 校验要求至少 1 个里程碑，故里程碑非空即 B 已登记
+          // 该作业，可作为 internal 查询的前置条件。
+          const ms = await bApi('GET', `/v1/assignments/${a.id}/milestones`).catch((e) => e);
+          bState.milestones = ms.data ? ms.data.milestones : null;
+          if (bState.milestones && bState.milestones.length) {
+            const [jobs, cards] = await Promise.all([
+              bApi('GET', `/v1/internal/reminder-jobs?assignmentId=${encodeURIComponent(a.id)}`).catch((e) => e),
+              bApi('GET', `/v1/internal/yellow-cards?assignmentId=${encodeURIComponent(a.id)}`).catch((e) => e)
+            ]);
+            bState.jobs = jobs.data ? jobs.data.jobs : [];
+            bState.cards = cards.data ? cards.data.cards : [];
+          } else { bState.jobs = []; bState.cards = []; }
+        } else { bState.milestones = null; bState.jobs = []; bState.cards = []; }
+      }
+    } catch (_) { bState.online = false; }
   }
 
   async function loadTaskDetail(tid, commentsOnly = false) {
@@ -545,7 +746,35 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
 
   /* ---------------- 工具 ---------------- */
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const user = (id) => state.users.find((u) => u.id === id) || { id, name: '未知用户', color: '#9ca3af' };
+  // 复制文本：原型以 file:// 打开时 Clipboard API 常被拒，且失败会消耗用户手势，
+  // 故先走同步的 textarea + execCommand('copy')，再降级到 Clipboard API。
+  async function copyText(text) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      const sel = window.getSelection();
+      const prev = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand('copy');
+      ta.remove();
+      if (prev && sel) { sel.removeAllRanges(); sel.addRange(prev); }
+      if (ok) return true;
+    } catch (_) { /* 落到 Clipboard API */ }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_) { /* 权限被拒 / 非安全上下文 */ }
+    return false;
+  }
+  const user = (id) => id === 'system'
+    ? { id, name: '系统', color: '#64748b' }
+    : state.users.find((u) => u.id === id) || { id, name: '未知用户', color: '#9ca3af' };
   const group = (id) => state.groups.find((g) => g.id === id) || null;
   const task = (id) => state.tasks.find((t) => t.id === id) || null;
   const isLeader = (gid) => !!group(gid) && group(gid).ownerId === state.session;
@@ -557,6 +786,29 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     const d = new Date(v);
     return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
+  // datetime-local 输入 ↔ ISO 契约（B 端点收 ISO 字符串）
+  const toLocalInput = (iso) => {
+    const d = new Date(iso);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const fromLocalInput = (v) => new Date(v).toISOString();
+  const defaultDdlInput = () => toLocalInput(new Date(Date.now() + 14 * 86400000).toISOString());
+  function msPhase(due) {
+    const left = Date.parse(due) - Date.now();
+    if (left <= 0) return ['overdue', '已逾期'];
+    if (left <= 24 * 3600000) return ['h24', '24h 内'];
+    if (left <= 48 * 3600000) return ['h48', '48h 内'];
+    return ['future', '未到期'];
+  }
+  // 小组可有多份作业（B 每次 commit 生成一份）；选中态驱动看板/审核/贡献/时间四个页签。
+  function selectedAssignment(gid) {
+    const list = state.assignments.filter((a) => a.groupId === gid);
+    return list.find((a) => a.id === ui.assignmentId) || list[0] || null;
+  }
+  function bellBtn() {
+    return `<button class="icon-btn" data-act="open-notifications" title="通知中心" aria-label="通知中心${bState.unread ? `，${bState.unread} 条未读` : ''}">🔔${bState.unread ? `<span class="nbadge" aria-hidden="true">${bState.unread > 99 ? '99+' : bState.unread}</span>` : ''}</button>`;
+  }
   const isValidUrl = (v) => /^https?:\/\/[^\s]+$/i.test(String(v).trim());
   function urlType(url) {
     if (/docs\.qq\.com/i.test(url)) return '腾讯文档';
@@ -585,48 +837,89 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
       app.innerHTML = renderGroups();
     } else if (ui.view === 'group') {
       app.innerHTML = renderGroup();
+    } else if (ui.view === 'notifications') {
+      app.innerHTML = renderNotifications();
+    } else if (ui.view === 'settings') {
+      app.innerHTML = renderSettings();
+    } else if (ui.view === 'wizard') {
+      app.innerHTML = renderWizard();
+    } else if (ui.view === 'confirm') {
+      app.innerHTML = renderConfirm();
     } else {
       app.innerHTML = renderGroups();
       ui.view = 'groups';
     }
     renderModal();
+    associateFieldLabels(document);
+  }
+
+  // 视觉上有 label、语义上没有关联的输入框，补齐 label/for，点标签也能聚焦输入框。
+  let fieldSeq = 0;
+  function associateFieldLabels(root) {
+    root.querySelectorAll('.field > label').forEach((lab) => {
+      if (lab.htmlFor) return;
+      const ctl = lab.parentElement.querySelector('input, textarea, select');
+      if (!ctl) return;
+      if (!ctl.id) ctl.id = 'field-' + (++fieldSeq);
+      lab.htmlFor = ctl.id;
+    });
   }
 
   function appBar(title, right = '', back = false) {
     return `<div class="app-bar">
-      ${back ? `<button class="icon-btn" data-act="back-groups" aria-label="返回">‹</button>` : `<div class="brand"><div class="brand-mark">协</div></div>`}
-      <h1>${esc(title)}${back ? '<div class="sub">A 线 · 组队与协作</div>' : ''}</h1>
+      ${back ? `<button class="icon-btn" data-act="${back === 'group' ? 'back-group' : 'back-groups'}" aria-label="返回">‹</button>` : `<div class="brand"><div class="brand-mark">鸽</div></div>`}
+      <h1>${esc(title)}${back ? '<div class="sub">别鸽了 · 组队协作 × 智能时间</div>' : ''}</h1>
       ${right}
     </div>`;
   }
 
   /* ---------------- F1 登录 ---------------- */
+  /* ---------------- 注册 / 登录页（F1） ---------------- */
   function renderLogin() {
-    return `${appBar('协作层')}
-    <div class="screen flush">
+    const mode = ui.authMode === 'register' ? 'register' : 'login';
+    return `${appBar('别鸽了')}
+    <div class="screen">
       <div class="hero">
-        <div class="logo">协</div>
-        <h1>小组作业协作层</h1>
-        <p>建组 · 认领 · 审核 · 统一提交<br>5 分钟建起来，全过程留痕</p>
-        <button class="btn block" data-act="wx-login">微信一键登录</button>
-        <div style="height:10px"></div>
-        <button class="btn ghost block" data-act="email-login-open">邮箱验证码登录（H5 兜底）</button>
-        <div class="feature-row">
-          <div><b>7</b>P0 功能</div><div><b>3</b>步入组</div><div><b>2.5s</b>轮询同步</div>
-        </div>
+        <div class="logo">鸽</div>
+        <h1>别鸽了 · 小组作业协作层</h1>
+        <p>建组 · 认领 · 审核 · 贡献提交<br>模板/AI 拆解 · 按截止倒推 · 提醒 · 逾期提示，全过程留痕</p>
       </div>
-      <div class="card tight" style="margin-top:24px">
+      <div class="tabs" role="tablist" aria-label="登录方式">
+        <button class="${mode === 'login' ? 'active' : ''}" data-act="auth-mode" data-mode="login" role="tab" aria-selected="${mode === 'login'}">登录</button>
+        <button class="${mode === 'register' ? 'active' : ''}" data-act="auth-mode" data-mode="register" role="tab" aria-selected="${mode === 'register'}">注册</button>
+      </div>
+      <div class="card auth-card">
+        ${mode === 'register' ? `<div class="field"><label>昵称<span class="req-tag">必填</span></label><input id="auth-name" maxlength="12" placeholder="组内展示名，2–12 个字符" value="${esc(authForm.name)}"></div>` : ''}
+        <div class="field"><label>邮箱</label><input id="auth-email" type="email" autocomplete="email" placeholder="name@example.edu" value="${esc(authForm.email)}"></div>
+        <div class="field"><label>邮箱验证码</label><input id="auth-code" inputmode="numeric" maxlength="6" placeholder="6 位验证码"><div class="hint" id="auth-code-hint">点击发送后，演示验证码会显示在提示中</div></div>
+        <div class="btn-row">
+          <button class="btn ghost" id="auth-send-btn" data-act="auth-send-code">发送验证码</button>
+          <button class="btn" data-act="${mode === 'register' ? 'auth-register' : 'auth-login'}">${mode === 'register' ? '注册并进入' : '登录'}</button>
+        </div>
+        <p class="auth-foot">${mode === 'register'
+          ? '注册成功即自动登录，直接进入「我的小组」；昵称将成为组内展示名。'
+          : '登录后进入「我的小组」；未注册的邮箱首次登录会自动建档。'}</p>
+      </div>
+      ${mode === 'login' ? `
+      <div style="height:12px"></div>
+      <button class="btn plain block" data-act="wx-login">微信一键登录</button>
+      <div class="card tight" style="margin-top:16px">
         <div class="block-title"><span>演示身份</span><span class="muted">点击直接切换</span></div>
         ${state.users.length ? userSwitch() : '<p class="muted">演示身份目录加载中…</p>'}
-        <p class="muted" style="margin:4px 0 0">演示身份由 mock API 签发会话。真实环境由微信授权 / 邮箱验证码签发 7 天 JWT。</p>
-        ${apiError ? `<p class="muted" style="margin:6px 0 0;color:var(--danger)">连不上 mock API（${esc(API)}）：${esc(apiError)}<br>请先启动 e2e/mock/server.js，再刷新本页。</p>` : ''}
-      </div>
+        <p class="muted" style="margin:4px 0 0">演示账号用于体验组长 / 成员的不同视角；正式环境使用微信或邮箱验证码登录。</p>
+      </div>` : `
+      <div class="card tight" style="margin-top:16px">
+        <div class="block-title"><span>注册说明</span><span class="muted">原型演示</span></div>
+        <p class="muted" style="margin:0">注册后即可建组或凭邀请码加入；正式环境将支持微信授权注册。</p>
+      </div>`}
+      ${apiError ? `<p class="muted" style="margin:10px 2px 0;color:var(--danger)">暂时连不上服务，请检查网络后重试。</p>` : ''}
+      <div style="height:12px"></div>
       <button class="btn plain block sm" data-act="reset-demo">重置演示数据</button>
     </div>`;
   }
   function userSwitch() {
     return `<div class="user-switch">${state.users.map((u) => `
-      <button data-act="switch-user" data-id="${u.id}" class="${state.session === u.id ? 'active' : ''}">
+      <button data-act="switch-user" data-id="${u.id}" class="${state.session === u.id ? 'active' : ''}" aria-pressed="${state.session === u.id}">
         <span class="avatar sm" style="background:${u.color}">${esc(u.name[0])}</span>${esc(u.name)}
       </button>`).join('')}</div>`;
   }
@@ -635,8 +928,9 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
   function renderGroups() {
     const myGroups = state.groups.filter((g) => memberIds(g.id).includes(state.session));
     const pending = state.pendingJoins.filter((p) => p.userId === state.session);
-    return `${appBar('我的小组', `<button class="icon-btn" data-act="switch-user-open" title="切换身份">⇄</button>`)}
+    return `${appBar('我的小组', `${bellBtn()}<button class="icon-btn" data-act="open-settings" title="提醒与订阅设置" aria-label="提醒与订阅设置">⚙</button><button class="icon-btn" data-act="switch-user-open" title="切换身份" aria-label="切换身份">⇄</button>`)}
     <div class="screen">
+      ${bState.online === false ? `<div class="b-offline">智能提醒服务暂时不可用：AI 拆解、提醒与通知可能受影响，小组协作不受影响。</div>` : ''}
       <div class="card tight">
         <div class="block-title"><span>当前身份</span><span class="muted">可切换体验不同角色</span></div>
         ${userSwitch()}
@@ -646,27 +940,21 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         ${pending.map((p) => `<div class="pending-row"><span class="who">申请加入「${esc(p.groupName || group(p.groupId)?.name || p.groupId)}」</span><span class="muted">${fmt(p.ts)}</span></div>`).join('')}
         <p class="muted" style="margin-bottom:0">切换到组长身份后在「成员」页处理。</p>
       </div>` : ''}
-      <div class="section-title"><h2>我的小组（${myGroups.length}）</h2><span class="muted">数据来自 mock API</span></div>
+      <div class="section-title"><h2>我的小组（${myGroups.length}）</h2><span class="muted">已加入的小组</span></div>
       ${myGroups.length ? myGroups.map((g) => {
         const ids = memberIds(g.id);
         const taskCount = state.tasks.filter((t) => t.groupId === g.id).length;
-        return `<div class="card group-card" data-act="open-group" data-id="${g.id}">
+        return `<div class="card group-card" data-act="open-group" data-id="${g.id}" role="button" tabindex="0" aria-label="${esc(g.name)}，${ids.length} 人，${taskCount} 个任务">
           <div class="group-avatar" style="background:${g.color || '#6366f1'}">${esc(g.name[0])}</div>
           <div class="meta"><strong>${esc(g.name)}</strong><span>${esc(g.course || '未关联课程')} · ${ids.length}/${g.memberLimit} 人 · ${taskCount} 个任务</span></div>
           <div class="avatar-stack">${ids.slice(0, 4).map((id) => `<span class="avatar sm" style="background:${user(id).color}">${esc(user(id).name[0])}</span>`).join('')}</div>
+          ${isLeader(g.id) ? `<button class="icon-btn del-x" data-act="delete-group-open" data-id="${g.id}" title="删除小组" aria-label="删除小组 ${esc(g.name)}">×</button>` : ''}
           <span style="color:var(--ink-3)">›</span>
         </div>`;
       }).join('') : `<div class="empty"><span class="big">◌</span>你还没有加入小组<br>创建一个，或用邀请码加入</div>`}
       <div class="btn-row" style="margin-top:14px">
         <button class="btn" data-act="create-group-open">＋ 建组</button>
         <button class="btn ghost" data-act="join-open">邀请码加入</button>
-      </div>
-      <div class="card tight" style="margin-top:16px;background:#fff">
-        <div class="block-title"><span>A 线范围</span></div>
-        <div class="chip-row">
-          <span class="chip">F1 登录</span><span class="chip">F2 建组邀请</span><span class="chip">F9 看板认领</span>
-          <span class="chip">F12 交付物</span><span class="chip">F13 评论</span><span class="chip">F21 审核</span><span class="chip">F22 统一提交</span>
-        </div>
       </div>
     </div>
     <div class="action-bar"><button class="btn plain" data-act="email-login-open">邮箱登录</button><button class="btn" data-act="wx-login">微信一键登录</button></div>`;
@@ -677,10 +965,15 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     const g = group(ui.groupId);
     if (!g || !memberIds(g.id).includes(state.session)) { ui.view = 'groups'; return renderGroups(); }
     const ids = memberIds(g.id);
-    const tasks = state.tasks.filter((t) => t.groupId === g.id);
+    const asgList = state.assignments.filter((a) => a.groupId === g.id);
+    const a = selectedAssignment(g.id);
+    const tasks = state.tasks.filter((t) => t.groupId === g.id && (!a || t.assignmentId === a.id));
     const done = tasks.filter((t) => t.status === 'done').length;
-    const tabs = [['board', '看板'], ['review', '审核'], ['submit', '提交'], ['events', '账本'], ['members', '成员']];
-    return `${appBar(g.name, `<button class="icon-btn" data-act="invite-open" title="邀请">＋</button>`, true)}
+    // 审核是组长职权：组员端整个页签不出现；切换身份后仍停在审核页则退回看板
+    const leader = isLeader(g.id);
+    if (ui.tab === 'review' && !leader) ui.tab = 'board';
+    const tabs = [['board', '看板'], ...(leader ? [['review', '审核']] : []), ['contrib', '贡献'], ['time', '时间'], ['events', '记录'], ['members', '成员']];
+    return `${appBar(g.name, `${bellBtn()}<button class="icon-btn" data-act="invite-open" title="邀请" aria-label="邀请成员">＋</button>`, true)}
     <div class="screen">
       <div class="card tight">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -688,23 +981,35 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
           <div class="muted">组长：${esc(user(g.ownerId).name)} · ${ids.length}/${g.memberLimit} 人 · ${isLeader(g.id) ? '你是组长' : '你是成员'}</div></div>
           <div class="avatar-stack">${ids.slice(0, 5).map((id) => `<span class="avatar" style="background:${user(id).color}">${esc(user(id).name[0])}</span>`).join('')}</div>
         </div>
+        <div class="divider" style="margin:12px 0"></div>
+        <div class="asg-bar">
+          <select data-change="pick-assignment" aria-label="选择作业" ${asgList.length ? '' : 'disabled'}>
+            ${asgList.length ? asgList.map((x) => `<option value="${x.id}" ${a && x.id === a.id ? 'selected' : ''}>${esc(x.title)} · 截止 ${fmt(x.finalDdl)}</option>`).join('') : '<option>暂无作业</option>'}
+          </select>
+          <button class="btn sm" data-act="open-wizard" ${isLeader(g.id) ? '' : 'disabled'} title="${isLeader(g.id) ? '模板 / AI 拆解建作业' : '仅组长可建作业'}">＋ 新建作业</button>
+        </div>
       </div>
       <div class="stat-grid">
         <div class="stat"><b>${tasks.length}</b><span>全部任务</span></div>
         <div class="stat"><b>${tasks.filter((t) => t.status === 'doing').length}</b><span>进行中</span></div>
         <div class="stat"><b>${done}/${tasks.length}</b><span>已完成</span></div>
       </div>
-      <div class="tabs">${tabs.map(([k, label]) => `<button class="${ui.tab === k ? 'active' : ''}" data-act="tab" data-tab="${k}">${label}</button>`).join('')}</div>
-      ${ui.tab === 'board' ? renderBoard(tasks) : ''}
+      <div class="tabs" role="tablist" aria-label="小组页签">${tabs.map(([k, label]) => `<button class="${ui.tab === k ? 'active' : ''}" data-act="tab" data-tab="${k}" role="tab" aria-selected="${ui.tab === k}">${label}</button>`).join('')}</div>
+      ${ui.tab === 'board' ? renderBoard(tasks, g) : ''}
       ${ui.tab === 'review' ? renderReview(tasks) : ''}
-      ${ui.tab === 'submit' ? renderSubmit(g, tasks) : ''}
+      ${ui.tab === 'contrib' ? renderContrib(g, tasks) : ''}
+      ${ui.tab === 'time' ? renderTime(g, a) : ''}
       ${ui.tab === 'events' ? renderEvents(g.id) : ''}
       ${ui.tab === 'members' ? renderMembers(g, ids) : ''}
     </div>`;
   }
 
   /* ---------------- F9 看板 ---------------- */
-  function renderBoard(tasks) {
+  function renderBoard(tasks, g) {
+    if (!tasks.length && g && !selectedAssignment(g.id)) {
+      return `<div class="empty"><span class="big">▤</span>该小组还没有作业<br>${isLeader(g.id) ? '用模板或 AI 拆解，5 分钟把作业拆成看板任务' : '等待组长用模板 / AI 拆解创建作业'}</div>
+      ${isLeader(g.id) ? `<button class="btn block" data-act="open-wizard">＋ 新建作业（模板 / AI 拆解）</button>` : ''}`;
+    }
     const cols = [
       ['todo', '待办'], ['doing', '进行中'], ['review', '待审核'], ['done', '已完成']
     ];
@@ -716,13 +1021,13 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         ${list.length ? list.map(renderTaskCard).join('') : `<div class="muted" style="text-align:center;padding:26px 6px;font-size:11px">暂无任务</div>`}
       </div>`;
     }).join('')}</div>
-    <p class="muted" style="margin:12px 2px 0">横向滑动查看四列 · 点击卡片查看详情与评论</p>`;
+    <p class="muted" style="margin:12px 2px 0">横向滑动查看四列 · 点击或回车打开卡片</p>`;
   }
   function renderTaskCard(t) {
     const unclaimed = t.status === 'unclaimed';
     const overdue = t.status !== 'done' && Date.parse(t.due) < Date.now();
     const dl = latestDeliverable(t.id);
-    return `<div class="task-card ${unclaimed ? 'unclaimed' : ''}" data-act="open-task" data-id="${t.id}">
+    return `<div class="task-card ${unclaimed ? 'unclaimed' : ''}" data-act="open-task" data-id="${t.id}" role="button" tabindex="0" aria-label="${esc(t.title)}，${esc(STATUS[t.status] || '')}${t.assigneeId ? `，负责人${esc(user(t.assigneeId).name)}` : ''}，截止 ${fmt(t.due)}">
       <div class="title">${esc(t.title)}</div>
       <div class="row">
         ${t.assigneeId ? `<span class="avatar sm" style="background:${user(t.assigneeId).color}">${esc(user(t.assigneeId).name[0])}</span>` : `<span class="tag claimed">未认领</span>`}
@@ -733,14 +1038,14 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         ${t.rejected ? `<span class="tag rejected">已打回</span>` : ''}
         ${dl ? `<span class="tag">v${dl.version}</span>` : ''}
       </div>
-      ${unclaimed ? `<button class="btn sm mini-claim" data-act="claim" data-id="${t.id}">一键认领</button>` : ''}
+      ${unclaimed ? `<button class="btn sm mini-claim" data-act="claim" data-id="${t.id}" aria-label="认领任务 ${esc(t.title)}">一键认领</button>` : ''}
     </div>`;
   }
 
-  /* ---------------- F21 审核队列 ---------------- */
+  /* ---------------- F21 审核队列（仅组长可见） ---------------- */
   function renderReview(tasks) {
     const list = tasks.filter((t) => t.status === 'review');
-    return `<div class="section-title"><h2>待我审核（${list.length}）</h2><span class="muted">默认审核人：组长</span></div>
+    return `<div class="section-title"><h2>待我审核（${list.length}）</h2><span class="muted">组长职权 · 组员端无此页</span></div>
     ${list.length ? list.map((t) => {
       const dl = latestDeliverable(t.id);
       return `<div class="card tight review-item">
@@ -753,60 +1058,137 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         </a>` : ''}
         <div class="btn-row" style="margin-top:10px">
           <button class="btn ghost sm" data-act="reject-open" data-id="${t.id}">打回</button>
-          <button class="btn sm" data-act="approve" data-id="${t.id}" ${!isLeader(t.groupId) ? 'disabled' : ''}>通过</button>
+          <button class="btn sm" data-act="approve" data-id="${t.id}">通过</button>
         </div>
-        ${!isLeader(t.groupId) ? `<p class="muted" style="margin:7px 0 0">仅组长可审核，可切换林晓体验</p>` : ''}
       </div>`;
     }).join('') : `<div class="empty"><span class="big">✓</span>暂无待审核任务</div>`}`;
   }
 
-  /* ---------------- F22 统一提交 ---------------- */
-  function currentAssignment(gid) {
-    const t = state.tasks.find((x) => x.groupId === gid);
-    return state.assignments.find((a) => a.id === (t ? t.assignmentId : null))
-      || state.assignments.find((a) => a.groupId === gid) || null;
+  /* ---------------- 贡献页签（F12 交付物 / F22 统一提交） ---------------- */
+  // 任务描述与交付规格只在 GET /v1/tasks/{tid} 详情里，看板列表不返回；
+  // 进入贡献页时懒加载一次，空描述也记入 detailTried，避免 2.5s 轮询反复请求。
+  const detailTried = new Set();
+  async function ensureTaskContent(tasks) {
+    const need = tasks.filter((t) => !t.description && !t.deliverableSpec && !detailTried.has(t.id)).slice(0, 12);
+    if (!need.length) return;
+    for (const t of need) {
+      detailTried.add(t.id);
+      try {
+        const d = await api('GET', '/v1/tasks/' + t.id);
+        t.description = d.description || '';
+        t.deliverableSpec = d.deliverableSpec || '';
+        t.rejectReason = d.status === 'done' ? null : (d.rejectReason || null);
+        t.rejected = !!d.rejected && d.status !== 'done';
+      } catch (_) { /* 单条失败不阻塞贡献视图 */ }
+    }
+    if (ui.view === 'group' && ui.tab === 'contrib') render();
   }
-  function renderSubmit(g, tasks) {
-    const a = currentAssignment(g.id);
-    if (!a) return `<div class="section-title"><h2>作业统一提交</h2><span class="muted">不可变快照</span></div>
-      <div class="empty"><span class="big">▤</span>该小组还没有作业<br>作业由 B 线模板 / AI 拆解生成后，这里才会出现提交入口</div>`;
+
+  function contribStatus(t) {
+    if (t.status !== 'done' && Date.parse(t.due) < Date.now()) return ['overdue', '逾期'];
+    return [t.status, STATUS[t.status] || t.status];
+  }
+
+  function renderContribTask(t) {
+    const [cls, label] = contribStatus(t);
+    const dls = taskDeliverables(t.id);
+    const latest = dls[0];
+    return `<div class="contrib-task" data-act="open-task" data-id="${t.id}" role="button" tabindex="0" aria-label="${esc(t.title)}，${label}，截止 ${fmt(t.due)}">
+      <div class="ct-title"><span class="st ${cls}">${label}</span><span>${esc(t.title)}</span><span class="muted" style="font-size:11px;font-weight:400;flex:none">截止 ${fmt(t.due)}</span></div>
+      ${t.description ? `<p class="ct-desc">${esc(t.description)}</p>` : ''}
+      ${t.deliverableSpec ? `<p class="ct-spec">成果规格：${esc(t.deliverableSpec)}</p>` : ''}
+      ${latest ? `<div class="ct-deliver"><a class="deliverable" href="${esc(latest.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">
+          <span class="favicon">${esc((latest.type || '?')[0])}</span><span class="info"><strong>${esc(latest.title)}</strong><span>${esc(latest.type || '成果')} · ${fmt(latest.createdAt)} · 共 ${dls.length} 版</span></span><span>↗</span>
+        </a></div>` : `<div class="ct-none">还没有提交成果</div>`}
+      ${t.rejected ? `<div class="ct-none" style="color:var(--danger)">已打回${t.rejectReason ? '：' + esc(t.rejectReason) : ''}</div>` : ''}
+    </div>`;
+  }
+
+  function renderContribMember(g, id, tasks) {
+    const mine = tasks.filter((t) => t.assigneeId === id).sort((x, y) => Date.parse(x.due) - Date.parse(y.due));
+    const doneN = mine.filter((t) => t.status === 'done').length;
+    const load = mine.reduce((s, t) => s + (t.estimatedLoad || 0), 0);
+    const assignedLoad = tasks.filter((t) => t.assigneeId).reduce((s, t) => s + (t.estimatedLoad || 0), 0) || 1;
+    const versions = mine.reduce((s, t) => s + taskDeliverables(t.id).length, 0);
+    return `<div class="card tight">
+      <div class="contrib-head">
+        <span class="avatar sm" style="background:${user(id).color}">${esc(user(id).name[0])}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:650">${esc(user(id).name)}${id === g.ownerId ? ' <span class="tag">组长</span>' : ''}${id === state.session ? ' <span class="tag claimed">我</span>' : ''}</div>
+          <div class="contrib-stats"><span>任务 <b>${mine.length}</b></span><span>完成 <b>${doneN}/${mine.length}</b></span><span>负载 <b>${load}</b>（${Math.round(load / assignedLoad * 100)}%）</span><span>成果 <b>${versions}</b> 版</span></div>
+        </div>
+        <span class="tag" ${mine.length && doneN === mine.length ? 'style="background:#ecfdf5;color:var(--done)"' : ''}>${mine.length ? (doneN === mine.length ? '已完成' : `${mine.length - doneN} 项未完成`) : '无任务'}</span>
+      </div>
+      ${mine.length ? mine.map(renderContribTask).join('') : `<p class="muted" style="margin:10px 0 0">该成员还没有认领任务</p>`}
+    </div>`;
+  }
+
+  function renderContrib(g, tasks) {
+    const a = selectedAssignment(g.id);
+    if (!a) return `<div class="section-title"><h2>贡献</h2><span class="muted">按成员 · 任务与成果</span></div>
+      <div class="empty"><span class="big">▤</span>该小组还没有作业<br>先用模板 / AI 拆解创建作业，这里才会出现贡献视图</div>
+      ${isLeader(g.id) ? `<button class="btn block" data-act="open-wizard">＋ 新建作业</button>` : ''}`;
+    const ids = memberIds(g.id);
+    const doneN = tasks.filter((t) => t.status === 'done').length;
     const unfinished = tasks.filter((t) => t.status !== 'done');
+    const unclaimed = tasks.filter((t) => t.status === 'unclaimed');
+    const withTasks = ids.filter((id) => tasks.some((t) => t.assigneeId === id));
+    const versions = tasks.reduce((s, t) => s + taskDeliverables(t.id).length, 0);
+    const totalLoad = tasks.reduce((s, t) => s + (t.estimatedLoad || 0), 0) || 1;
     const latest = state.finalSubmissions.find((s) => s.groupId === g.id && s.assignmentId === a.id);
-    return `<div class="section-title"><h2>作业统一提交</h2><span class="muted">不可变快照</span></div>
+    const submitCount = state.finalSubmissions.filter((s) => s.groupId === g.id && s.assignmentId === a.id).length;
+    const bar = ids.map((id) => {
+      const load = tasks.filter((t) => t.assigneeId === id).reduce((s, t) => s + (t.estimatedLoad || 0), 0);
+      return load ? `<span style="width:${(load / totalLoad * 100).toFixed(2)}%;background:${user(id).color}" title="${esc(user(id).name)} · 负载 ${load}"></span>` : '';
+    }).join('');
+    return `<div class="section-title"><h2>贡献总览</h2><span class="muted">按成员 · 任务与成果</span></div>
     <div class="card">
       <div style="font-weight:650;font-size:14px">${esc(a.title)}</div>
-      <div class="muted" style="margin:4px 0 12px">最终 DDL：${fmt(a.finalDdl)}</div>
+      <div class="muted" style="margin:4px 0 10px">最终截止：${fmt(a.finalDdl)}</div>
+      <div class="kv"><span>任务完成度</span><span class="${unfinished.length ? '' : 'verify-ok'}">${doneN} / ${tasks.length}</span></div>
+      <div class="kv"><span>成果版本</span><span>${versions}</span></div>
+      <div class="kv"><span>参与成员</span><span>${withTasks.length} / ${ids.length}${unclaimed.length ? ` · 未认领 ${unclaimed.length} 个任务` : ''}</span></div>
+      <div class="contrib-bar" style="margin-top:10px">${bar}</div>
+      <p class="muted" style="margin:7px 0 0;font-size:11px">色条长度 = 每人认领任务的负载占比（只算已认领任务）。点击任务可查看详情与评论。</p>
+    </div>
+    ${ids.map((id) => renderContribMember(g, id, tasks)).join('')}
+    ${unclaimed.length ? `<div class="card tight">
+      <div class="block-title"><span>未认领任务（${unclaimed.length}）</span><span class="muted">点开可认领 · 24 小时未认领自动分配</span></div>
+      ${unclaimed.map(renderContribTask).join('')}
+    </div>` : ''}
+    <div class="section-title"><h2>最终提交</h2><span class="muted">提前提交仅组长</span></div>
+    <div class="card">
       <div class="kv"><span>任务完成度</span><span class="${unfinished.length ? '' : 'verify-ok'}">${tasks.length - unfinished.length} / ${tasks.length}</span></div>
       <div class="kv"><span>待完成</span><span>${unfinished.length ? unfinished.map((t) => esc(t.title)).join('、') : '无'}</span></div>
-      <div class="kv"><span>已提交次数</span><span>${state.finalSubmissions.filter((s) => s.groupId === g.id).length}</span></div>
+      <div class="kv"><span>已提交次数</span><span>${submitCount}</span></div>
       <p class="muted" style="margin:12px 0 0">${unfinished.length
-        ? (isLeader(g.id) ? '任务未全部完成，组长强制提交须填写理由，并写入事件账本。' : '还有任务未完成，仅组长可强制提交。')
-        : '全部任务已完成，可生成不可变提交快照。'}</p>
-      ${!latest ? `<button class="btn block" style="margin-top:14px" data-act="final-submit-open" data-force="${unfinished.length ? 1 : 0}" ${!isLeader(g.id) && unfinished.length ? 'disabled' : ''}>生成统一提交快照</button>`
-        : `<button class="btn ghost block sm" style="margin-top:14px" data-act="final-submit-open" data-force="${unfinished.length ? 1 : 0}">再次提交（保留历史快照）</button>`}
+        ? (isLeader(g.id) ? '任务未全部完成，组长可提前提交（强制提交须填写理由，并写入小组记录）。' : '还有任务未完成，提前提交仅组长可操作。')
+        : '全部任务已完成，可生成最终提交存档。'}</p>
+      ${!latest ? `<button class="btn block" style="margin-top:14px" data-act="final-submit-open" data-force="${unfinished.length ? 1 : 0}" ${!isLeader(g.id) && unfinished.length ? 'disabled' : ''}>${unfinished.length ? '提前提交存档' : '生成最终提交存档'}</button>`
+        : `<button class="btn ghost block sm" style="margin-top:14px" data-act="final-submit-open" data-force="${unfinished.length ? 1 : 0}" ${!isLeader(g.id) && unfinished.length ? 'disabled' : ''}>再次提交（保留历史存档）</button>`}
     </div>
-    ${latest ? renderSnapshot(latest, tasks) : `<div class="empty"><span class="big">▤</span>尚未提交<br>快照生成后任何修改都不会影响快照内容</div>`}`;
+    ${latest ? renderSnapshot(latest, tasks) : `<div class="empty"><span class="big">▤</span>尚未提交<br>存档生成后，任何修改都不会影响存档内容</div>`}`;
   }
   function renderSnapshot(s, tasks) {
     const snapTasks = s.snapshot.tasks || [];
     const same = JSON.stringify(snapTasks.map((t) => [t.id, t.status])) === JSON.stringify(tasks.map((t) => [t.id, t.status]));
     return `<div class="snapshot-banner">
-      <strong>✓ 已生成不可变快照 · ${fmt(s.createdAt)}</strong>
+      <strong>✓ 已生成提交存档 · ${fmt(s.createdAt)}</strong>
       <p>提交人：${esc(user(s.submittedBy).name)}${s.reason ? ' · 强制提交理由：' + esc(s.reason) : ''}</p>
     </div>
     <div class="card">
-      <div class="block-title"><span>快照内容</span><span class="tag version">${snapTasks.length} 个任务</span></div>
+      <div class="block-title"><span>存档内容</span><span class="tag version">${snapTasks.length} 个任务</span></div>
       ${snapTasks.map((t) => `<div class="kv"><span>${esc(t.title)}</span><span>${STATUS[t.status]}${t.deliverable ? ' · ' + esc(t.deliverable.title) + ' v' + t.deliverable.version : ''}</span></div>`).join('')}
       <div class="divider"></div>
-      <button class="btn plain sm block" data-act="verify-snapshot" data-id="${s.id}">校验快照不可变性</button>
-      <p class="muted" style="margin:7px 0 0">${same ? '当前任务状态与快照一致（演示校验：修改任务后再点此按钮观察差异）' : '当前任务状态已变化，快照内容仍保持提交瞬间的内容'}</p>
+      <button class="btn plain sm block" data-act="verify-snapshot" data-id="${s.id}">校验存档是否被修改</button>
+      <p class="muted" style="margin:7px 0 0">${same ? '当前任务状态与存档一致（可先修改一个任务状态，再回来验证）' : '当前任务状态已变化，存档内容仍保持提交时的状态'}</p>
     </div>`;
   }
 
   /* ---------------- 事件账本 ---------------- */
   function renderEvents(gid) {
     const list = state.events.filter((e) => !gid || e.groupId === gid || !e.groupId).sort((a, b) => b.ts - a.ts);
-    return `<div class="section-title"><h2>事件账本</h2><span class="muted">${list.length} 条 · 写 Event 100%</span></div>
+    return `<div class="section-title"><h2>小组记录</h2><span class="muted">${list.length} 条操作记录</span></div>
     <div class="card">${list.length ? list.map((e) => `
       <div class="event-item">
         <div class="ev-icon">${EV_ICON[e.type] || '·'}</div>
@@ -838,6 +1220,226 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
       ${ids.map((id) => `<div class="pending-row"><span class="avatar sm" style="background:${user(id).color}">${esc(user(id).name[0])}</span><span class="who">${esc(user(id).name)}${id === g.ownerId ? ' <span class="tag">组长</span>' : ''}</span>
         ${id === state.session && id !== g.ownerId ? `<button class="btn xs plain" data-act="exit-group">退出</button>` : ''}
         ${isLeader(g.id) && id !== g.ownerId ? `<button class="btn xs plain" data-act="transfer-open" data-id="${id}">转让</button>` : ''}</div>`).join('')}
+    </div>
+    ${isLeader(g.id) ? `<div class="card tight danger-zone">
+      <div class="block-title"><span>删除小组</span><span class="muted">仅组长可见</span></div>
+      <p class="del-note">删除后「${esc(g.name)}」的作业、任务、成果与提交记录一并清除，${ids.length} 名成员立即失去访问权限，提醒与逾期提醒同时停止。小组记录会保留。</p>
+      <button class="btn danger sm" data-act="delete-group-open" data-id="${g.id}">删除这个小组</button>
+    </div>` : ''}`;
+  }
+
+  /* ---------------- B 线 · 时间页签（F7 里程碑倒推 + F16 提醒 + F19 黄牌） ---------------- */
+  function renderTime(g, a) {
+    if (!a) return `<div class="empty"><span class="big">◷</span>还没有作业<br>新建作业后，这里会展示关键节点与提醒计划</div>`;
+    if (bState.online === false) return `<div class="b-offline">提醒服务暂时不可用，关键节点与提醒计划无法加载。</div>`;
+    if (bState.milestones == null) return `<div class="empty"><span class="big">◷</span>加载中，或该作业还没有生成提醒计划</div>`;
+    const ms = [...bState.milestones].sort((x, y) => x.sort - y.sort);
+    const jobs = bState.jobs;
+    const cards = bState.cards;
+    const jobLabel = (j) => {
+      if (j.object_kind === 'milestone') {
+        const m = ms.find((x) => x.id === j.object_id);
+        return '关键节点 · ' + (m ? m.name : j.object_id);
+      }
+      const t = state.tasks.find((x) => x.id === j.object_id);
+      return '任务 · ' + (t ? t.title : j.object_id);
+    };
+    return `<div class="section-title"><h2>关键节点时间线（${ms.length}）</h2><span class="muted">按截止时间倒推</span></div>
+    <div class="card">
+      <ol class="tl-list">${ms.map((m) => {
+        const [cls, label] = msPhase(m.due);
+        return `<li class="tl-item ${cls}"><span class="tl-dot"></span>
+          <div style="flex:1"><div class="tl-name">${m.sort + 1}. ${esc(m.name)}<span class="phase-tag ${cls}">${label}</span></div>
+          <div class="muted">${fmt(m.due)}</div></div></li>`;
+      }).join('')}</ol>
+    </div>
+    <div class="section-title"><h2>提醒计划（${jobs.length}）</h2><span class="muted">截止前 48 小时 / 24 小时</span></div>
+    <div class="card tight">
+      ${jobs.length ? jobs.map((j) => `<div class="kv"><span>${esc(jobLabel(j))}<div class="muted" style="font-size:11px">${fmt(j.fire_at)}</div></span><span><span class="job-status ${j.status}">${{ pending: '待发', sent: '已发', failed: '失败' }[j.status] || j.status}</span></span></div>`).join('') : '<p class="muted">暂无提醒任务</p>'}
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn ghost sm" data-act="schedule-refresh" data-aid="${a.id}">重算提醒</button>
+        <button class="btn sm" data-act="schedule-tick">立即检查（演示）</button>
+      </div>
+      <p class="muted" style="margin:7px 0 0">立即检查会发送已到点的提醒；截止前 24 小时仍无人认领的任务会自动随机分配给组员。提醒进入 🔔 通知中心，逾期后会再次提醒。</p>
+    </div>
+    ${cards.length ? `<div class="section-title"><h2>逾期提醒（${cards.length}）</h2><span class="muted">只提醒当事人与组长</span></div>
+    <div class="card tight">${cards.map((c) => `<div class="kv"><span>${esc(user(c.member_id).name)}</span><span><span class="tag rejected">逾期 ${c.streak} 个任务</span></span></div>`).join('')}
+      <p class="muted" style="margin:7px 0 0">已向本人和组长发送提醒，可在通知中心和小组记录中查看。</p></div>` : ''}`;
+  }
+
+  /* ---------------- B 线 · 通知中心（F16/F19 站内信，已读闭环） ---------------- */
+  const NTYPE_LABEL = { reminder: '提醒', mention: '评论 @', comment: '任务评论', reject: '打回', auto_assign: '自动分配', yellow_card_self: '逾期提醒·本人', yellow_card_leader: '逾期提醒·组长' };
+  function renderNotifications() {
+    const ns = bState.notifications;
+    return `${appBar('通知中心', '', true)}
+    <div class="screen">
+      ${bState.online === false ? `<div class="b-offline">通知服务暂时不可用，请稍后刷新。</div>` : ''}
+      <div class="card tight">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <label class="chk" style="padding:0"><input type="checkbox" data-change="toggle-unread" ${ui.unreadOnly ? 'checked' : ''}> 只看未读</label>
+          <span class="muted">${ns.length} 条${ui.unreadOnly ? '未读' : ''}</span>
+        </div>
+      </div>
+      ${ns.length ? ns.map((n) => `<div class="card tight note-card ${n.read_at ? 'read' : ''}">
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="ntype ${esc(n.type)}">${esc(NTYPE_LABEL[n.type] || n.type)}</span>
+          <strong style="font-size:13px;flex:1">${esc(n.title)}</strong>
+        </div>
+        <div class="note-body">${esc(n.body)}</div>
+        <div class="note-foot"><span class="muted">${fmt(n.created_at)}</span>
+          ${n.read_at ? '<span class="muted">已读</span>' : `<button class="btn xs ghost" data-act="note-read" data-id="${n.id}">标记已读</button>`}
+        </div>
+      </div>`).join('') : `<div class="empty"><span class="big">🔔</span>暂无通知<br>到点提醒、任务评论、自动分配、打回与逾期提醒都会出现在这里</div>`}
+    </div>`;
+  }
+
+  /* ---------------- B 线 · 提醒与订阅设置（F17） ---------------- */
+  function renderSettings() {
+    let prefs = {};
+    try { prefs = JSON.parse(localStorage.getItem('merged_b_prefs') || '{}'); } catch (_) { /* 隐私模式 */ }
+    const q = bState.quota;
+    return `${appBar('提醒与订阅设置', '', true)}
+    <div class="screen">
+      ${bState.online === false ? `<div class="b-offline">提醒服务暂时不可用，订阅额度无法加载。</div>` : ''}
+      <div class="card">
+        <div class="block-title"><span>通道偏好</span></div>
+        <label class="chk"><input type="checkbox" checked disabled> 站内信（必发，不可关）</label>
+        <label class="chk"><input type="checkbox" data-change="pref-email" ${prefs.email !== false ? 'checked' : ''}> 邮件兜底（有邮箱时发送）</label>
+        <label class="chk"><input type="checkbox" ${q && q.wechatEnabled ? 'checked' : ''} disabled> 微信订阅消息（需在小程序内授权）</label>
+        <p class="muted" style="margin:6px 0 0">提醒偏好保存在当前浏览器。</p>
+      </div>
+      <div class="card">
+        <div class="block-title"><span>微信订阅额度</span><button class="link" data-act="settings-reload">刷新</button></div>
+        <p class="muted" style="margin:0">${q ? `剩余额度：${q.remaining} 条${q.collectedAt ? ' · 最近续订：' + fmt(q.collectedAt) : ''} · 微信通道：${q.wechatEnabled ? '开' : '关（改用邮件和站内提醒）'}` : '额度加载中…'}</p>
+        <p class="muted" style="margin:8px 0 0">微信订阅消息需在小程序内按引导续订；额度不足时会自动改用邮件和站内提醒，不会漏提醒。网页端暂不支持微信授权，续订请在小程序内完成。</p>
+        <button class="btn ghost sm block" style="margin-top:10px" disabled>去续订（小程序内开放）</button>
+      </div>
+    </div>`;
+  }
+
+  /* ---------------- B 线 · 建作业向导（F5 模板 / F6 AI 拆解） ---------------- */
+  // 任务分配数量：用户显式填写，B 侧按这个条数精确生成（多拆少合），不再让用户填小组人数
+  function countPreview() {
+    const n = Number(wiz && wiz.taskCount);
+    if (!Number.isInteger(n) || n < 2 || n > 12) {
+      return { bad: true, html: '请填写 <b>2–12</b> 的整数，任务将按这个数量分配' };
+    }
+    const html = wiz.mode === 'ai'
+      ? `AI 将拆出 <b>${n}</b> 个任务${n > 4 ? '（超出模板的部分按负载拆分）' : ''}；AI 暂时不可用时改用模板，数量不变`
+      : n > 4 ? `模板 4 个任务 → 拆成 <b>${n}</b> 个（按负载配比，截止时间排在最终截止前）`
+        : n < 4 ? `模板 4 个任务 → 合并为 <b>${n}</b> 个（标题与成果规格保留）`
+          : `与模板任务数一致，原样生成 <b>4</b> 个`;
+    return { bad: false, html };
+  }
+
+  function syncCountUi() {
+    const box = $('#wiz-count-preview');
+    if (!wiz || !box) return;
+    const p = countPreview();
+    box.className = 'count-preview' + (p.bad ? ' bad' : '');
+    box.innerHTML = p.html;
+    const n = Number(wiz.taskCount);
+    document.querySelectorAll('.count-chip').forEach((c) => c.classList.toggle('on', Number(c.dataset.n) === n));
+    const minus = document.querySelector('[data-act="wiz-count"][data-delta="-1"]');
+    const plus = document.querySelector('[data-act="wiz-count"][data-delta="1"]');
+    if (minus) minus.disabled = !(n > 2);
+    if (plus) plus.disabled = !(n < 12);
+  }
+
+  const TPL_NAME = { code: '代码项目', pre: '课堂展示', report: '调研报告', video: '视频制作' };
+  const tplName = (t) => TPL_NAME[t.category] || t.name;
+
+  function renderWizard() {
+    const g = group(ui.groupId);
+    if (!g || !wiz) { ui.view = 'groups'; return renderGroups(); }
+    const tpls = bState.templates || [];
+    const members = memberIds(g.id).length;
+    const perOne = Math.min(12, Math.max(2, members));
+    const perTwo = Math.min(12, Math.max(2, members * 2));
+    const n = Number(wiz.taskCount);
+    const p = countPreview();
+    const chip = (label, v) => `<button class="count-chip ${n === v ? 'on' : ''}" data-act="wiz-count-set" data-n="${v}">${label} · ${v}</button>`;
+    // 小组只有 1–2 人时「每人 1 个」与「每人 2 个」会夹到同一个值，去重免得出现两个一样的 chip
+    const chips = [[ '每人 1 个', perOne ], [ '每人 2 个', perTwo ], [ '模板默认', 4 ]]
+      .filter(([ , v ], i, arr) => arr.findIndex(([ , x ]) => x === v) === i);
+    return `${appBar('新建作业', '', 'group')}
+    <div class="screen">
+      <div class="card tight"><div class="muted">小组：${esc(g.name)} · 仅组长可建 · 提交给 AI 前会自动隐去个人信息</div></div>
+      <div class="tabs" role="tablist" aria-label="建作业方式">
+        <button class="${wiz.mode === 'ai' ? 'active' : ''}" data-act="wiz-mode" data-mode="ai" role="tab" aria-selected="${wiz.mode === 'ai'}">AI 拆解</button>
+        <button class="${wiz.mode === 'tpl' ? 'active' : ''}" data-act="wiz-mode" data-mode="tpl" role="tab" aria-selected="${wiz.mode === 'tpl'}">模板</button>
+      </div>
+      <div class="card">
+        <div class="field"><label>最终截止</label><input type="datetime-local" data-bind="wiz.ddl" value="${esc(wiz.ddl)}"><div class="hint">关键节点会按最终截止自动倒推；任务截止不得晚于最终截止。</div></div>
+        <div class="field">
+          <label>任务分配数量<span class="req-tag">必填</span></label>
+          <div class="count-stepper">
+            <button class="step" data-act="wiz-count" data-delta="-1" ${n > 2 ? '' : 'disabled'} aria-label="减少一个任务">−</button>
+            <input type="number" min="2" max="12" step="1" inputmode="numeric" data-bind="wiz.taskCount" data-num="1" value="${esc(wiz.taskCount)}" aria-label="任务分配数量">
+            <button class="step" data-act="wiz-count" data-delta="1" ${n < 12 ? '' : 'disabled'} aria-label="增加一个任务">＋</button>
+          </div>
+          <div class="count-chips">${chips.map(([label, v]) => chip(label, v)).join('')}</div>
+          <div class="count-preview ${p.bad ? 'bad' : ''}" id="wiz-count-preview">${p.html}</div>
+          <div class="hint">当前小组 ${members} 人 · 任务为认领制，不指定负责人；确认页仍可逐个增删改。</div>
+        </div>
+        ${wiz.mode === 'ai' ? `
+        <div class="field"><label>作业要求（粘贴老师的要求文本）</label><textarea data-bind="wiz.reqText" placeholder="例如：完成市场调研报告并课堂展示，含问卷、数据分析与 PPT…">${esc(wiz.reqText)}</textarea></div>
+        <button class="btn block" data-act="wiz-ai">AI 拆解 → 确认页</button>
+        <p class="muted" style="margin:8px 0 0">AI 暂时不可用时会改用模板草稿，可在确认页继续编辑，作业不会丢失。</p>` : `
+        <div class="field"><label>模板（四类）</label><select data-bind="wiz.templateId">
+          ${tpls.length ? tpls.map((t) => `<option value="${t.id}" ${wiz.templateId === t.id ? 'selected' : ''}>${esc(tplName(t))}</option>`).join('') : '<option value="">模板加载中…</option>'}
+        </select></div>
+        <div class="field"><label>作业标题（可选）</label><input data-bind="wiz.title" value="${esc(wiz.title)}" placeholder="留空用模板名"></div>
+        <button class="btn block" data-act="wiz-tpl">生成模板草稿 → 确认页</button>`}
+      </div>
+    </div>`;
+  }
+
+  /* ---------------- B 线 · 草稿确认页（全量可编辑 → commit 落看板） ---------------- */
+  function renderConfirm() {
+    if (!draft) { ui.view = 'groups'; return renderGroups(); }
+    return `${appBar('确认草稿', '', 'group')}
+    <div class="screen">
+      <div class="card tight"><div class="muted">全部内容可手动修改 · 任务认领制，不指定负责人</div></div>
+      ${draftErrors.length ? `<div class="errors-box">${esc(draftErrors.join('\n'))}</div>` : ''}
+      <div class="card">
+        <div class="block-title"><span>作业</span></div>
+        <div class="field"><label>标题</label><input data-bind="draft.assignment.title" value="${esc(draft.assignment.title)}"></div>
+        <div class="field"><label>最终截止</label><input type="datetime-local" data-bind="draft.assignment.finalDdl" data-time="1" value="${esc(toLocalInput(draft.assignment.finalDdl))}"></div>
+        <div class="field" style="margin-bottom:0"><label>作业要求</label><textarea data-bind="draft.assignment.requirementsText">${esc(draft.assignment.requirementsText || '')}</textarea></div>
+      </div>
+      <div class="card">
+        <div class="block-title"><span>任务（${draft.tasks.length}）</span><span class="muted">至少 2 个</span></div>
+        ${draft.tasks.map((t, i) => `<div class="draft-task">
+          <div class="key">任务编号：${esc(t.key)}</div>
+          <div class="field"><label>标题</label><input data-bind="draft.tasks.${i}.title" value="${esc(t.title)}"></div>
+          <div class="inline-fields">
+            <div class="field"><label>负载（1–5）</label><select data-bind="draft.tasks.${i}.estimatedLoad" data-num="1">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === t.estimatedLoad ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+            <div class="field"><label>截止</label><input type="datetime-local" data-bind="draft.tasks.${i}.due" data-time="1" value="${esc(toLocalInput(t.due))}"></div>
+          </div>
+          <div class="field"><label>成果规格</label><input data-bind="draft.tasks.${i}.deliverableSpec" value="${esc(t.deliverableSpec)}"></div>
+          <div class="field"><label>描述</label><input data-bind="draft.tasks.${i}.description" value="${esc(t.description)}"></div>
+          <div class="field"><label>前置任务编号（逗号分隔，可空）</label><input data-bind="draft.tasks.${i}.dependsOn" data-list="1" value="${esc((t.dependsOn || []).join(','))}"></div>
+          <button class="btn danger xs" data-act="draft-del-task" data-i="${i}">删除任务</button>
+        </div>`).join('')}
+        <button class="btn ghost sm block" data-act="draft-add-task">＋ 添加任务</button>
+      </div>
+      <div class="card">
+        <div class="block-title"><span>关键节点（${draft.milestones.length}）</span><span class="muted">▲▼ 排序 · 至少 1 个</span></div>
+        ${draft.milestones.map((m, i) => `<div class="ms-row">
+          <input type="text" data-bind="draft.milestones.${i}.name" value="${esc(m.name)}" aria-label="第 ${i + 1} 个关键节点名称">
+          <input type="datetime-local" data-bind="draft.milestones.${i}.due" data-time="1" value="${esc(toLocalInput(m.due))}" aria-label="第 ${i + 1} 个关键节点时间">
+          <button class="icon-btn" data-act="draft-ms-up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="上移关键节点">▲</button>
+          <button class="icon-btn" data-act="draft-ms-down" data-i="${i}" ${i === draft.milestones.length - 1 ? 'disabled' : ''} aria-label="下移关键节点">▼</button>
+          <button class="icon-btn" data-act="draft-del-ms" data-i="${i}" style="color:var(--danger)" aria-label="删除关键节点">×</button>
+        </div>`).join('')}
+        <button class="btn ghost sm block" data-act="draft-add-ms">＋ 添加关键节点</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn ghost" data-act="draft-save">保存草稿</button>
+        <button class="btn" data-act="draft-commit">确认创建作业</button>
+      </div>
+      <p class="muted" style="margin:10px 2px 0">确认后，任务会进入看板，关键节点与提醒计划会一并生成，可在「时间」页签查看。</p>
     </div>`;
   }
 
@@ -853,7 +1455,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     else if (t.status === 'review' && isLeader(t.groupId)) actions = `<button class="btn danger" data-act="reject-open" data-id="${t.id}">打回</button><button class="btn" data-act="approve" data-id="${t.id}">通过</button>`;
     return `<div class="sheet-head">
       <div><h2>${esc(t.title)}</h2><div class="sub">${esc(STATUS[t.status])} · 版本 v${t.version}</div></div>
-      <button class="close-x" data-act="close-modal">×</button>
+      <button class="close-x" data-act="close-modal" aria-label="关闭">×</button>
     </div>
     <div class="detail-meta">
       <span class="tag">负责人：${t.assigneeId ? esc(user(t.assigneeId).name) : '未认领'}</span>
@@ -862,20 +1464,20 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
       ${t.dependsOn.length ? `<span class="tag">依赖 ${t.dependsOn.map((id) => esc(task(id)?.title || id)).join('、')}</span>` : ''}
     </div>
     ${t.rejected ? `<div class="snapshot-banner" style="background:#fef2f2;border-color:#fecaca"><strong style="color:var(--danger)">已打回</strong><p style="color:#b91c1c">理由：${esc(t.rejectReason)}</p></div>` : ''}
-    <div class="detail-desc">${esc(t.description)}<div class="muted" style="margin-top:6px">交付物要求：${esc(t.deliverableSpec)}</div></div>
+    <div class="detail-desc">${esc(t.description)}<div class="muted" style="margin-top:6px">成果要求：${esc(t.deliverableSpec)}</div></div>
     ${actions ? `<div class="btn-row" style="margin-bottom:14px">${actions}</div>` : ''}
     <div class="divider"></div>
-    <div class="block-title"><span>交付物链接</span><span class="muted">版本链不可删除</span></div>
+    <div class="block-title"><span>成果链接</span><span class="muted">版本链不可删除</span></div>
     ${dlList.length ? dlList.map((d) => `<div class="deliverable">
       <span class="favicon">${esc(d.type[0])}</span>
       <span class="info"><strong>${esc(d.title)}</strong><span>v${d.version} · ${esc(d.type)} · ${esc(user(d.submittedBy).name)} · ${fmt(d.createdAt)}</span></span>
       <a href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none">↗</a>
-    </div>`).join('') : `<p class="muted">尚未挂载交付物</p>`}
+    </div>`).join('') : `<p class="muted">尚未添加成果</p>`}
     ${canAct && t.status !== 'done' ? `<div class="inline-fields" style="margin-top:9px">
-      <div class="field" style="flex:1.4"><input id="dl-title" placeholder="交付物标题" value="${esc(t.title)} · v${dlList.length + 1}"></div>
-      <div class="field" style="flex:.8"><select id="dl-type"><option>自动识别</option><option>腾讯文档</option><option>飞书文档</option><option>Google Docs</option><option>GitHub</option><option>网盘</option><option>其他链接</option></select></div>
+      <div class="field" style="flex:1.4"><input id="dl-title" placeholder="成果标题" aria-label="成果标题" value="${esc(t.title)} · v${dlList.length + 1}"></div>
+      <div class="field" style="flex:.8"><select id="dl-type" aria-label="成果类型"><option>自动识别</option><option>腾讯文档</option><option>飞书文档</option><option>Google Docs</option><option>GitHub</option><option>网盘</option><option>其他链接</option></select></div>
     </div>
-    <div class="field"><input id="dl-url" placeholder="https://… 粘贴可访问的文档 / 代码链接"><div class="hint">仅存链接、标题、类型、提交人与版本号，不存文件；每次提交版本自增。</div></div>
+    <div class="field"><input id="dl-url" placeholder="https://… 粘贴可访问的文档 / 代码链接" aria-label="成果链接"><div class="hint">仅存链接、标题、类型、提交人与版本号，不存文件；每次提交版本自增。</div></div>
     <button class="btn sm block" data-act="add-deliverable" data-id="${t.id}">提交新版本</button>` : ''}
     <div class="divider"></div>
     <div class="block-title"><span>讨论（${comments.length}）</span><span class="muted">评论不可删除 · 5 分钟内可编辑</span></div>
@@ -889,7 +1491,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         </div></div>`;
     }).join('')}
     <div class="mention-bar">@ ${memberIds(t.groupId).filter((id) => id !== state.session).map((id) => `<button data-act="mention" data-name="${esc(user(id).name)}">${esc(user(id).name)}</button>`).join('')}</div>
-    <div class="field" style="margin-bottom:0"><textarea id="comment-input" placeholder="写下评论，可点击上方 @ 成员…"></textarea></div>
+    <div class="field" style="margin-bottom:0"><textarea id="comment-input" placeholder="写下评论，可点击上方 @ 成员…" aria-label="评论内容"></textarea></div>
     <button class="btn sm block" style="margin-top:8px" data-act="add-comment" data-id="${t.id}">发送评论</button>`;
   }
   function renderMentions(body) {
@@ -897,63 +1499,124 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
   }
 
   /* ---------------- 弹窗 ---------------- */
+  // 键盘/读屏：弹窗打开时聚焦对话框本身（避免移动端自动弹键盘），关闭后焦点回到触发元素。
+  let modalReturn = null;
+  let lastActivation = null;
+  function focusLocator(el) {
+    const hit = el && el.closest && el.closest('[data-act]');
+    if (!hit) return null;
+    return { act: hit.dataset.act, id: hit.dataset.id || '', tab: hit.dataset.tab || '', mode: hit.dataset.mode || '' };
+  }
+  function restoreModalFocus() {
+    if (!modalReturn) return;
+    const { act, id, tab, mode } = modalReturn;
+    modalReturn = null;
+    if (!act) return;
+    const sel = `[data-act="${act}"]` + (id ? `[data-id="${id}"]` : '') + (tab ? `[data-tab="${tab}"]` : '') + (mode ? `[data-mode="${mode}"]` : '');
+    let el = null;
+    try { el = document.querySelector(sel); } catch (_) { return; }
+    if (el) el.focus({ preventScroll: true });
+  }
+  function decorateModal(root) {
+    const dlg = root.querySelector('.sheet, .dialog');
+    if (!dlg) return;
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    const head = dlg.querySelector('h2');
+    if (head) {
+      if (!head.id) head.id = 'modal-title';
+      dlg.setAttribute('aria-labelledby', head.id);
+    }
+    dlg.tabIndex = -1;
+    associateFieldLabels(root);
+    dlg.focus({ preventScroll: true });
+  }
   function renderModal() {
     const root = $('#modal-root');
-    if (!modal) { root.innerHTML = ''; return; }
+    if (!modal) {
+      const had = !!root.firstChild;
+      root.innerHTML = '';
+      if (had) restoreModalFocus();
+      return;
+    }
+    if (!root.firstChild) {
+      modalReturn = focusLocator(lastActivation || document.activeElement);
+      lastActivation = null;
+    }
     if (modal.type === 'task') {
       const t = task(modal.id);
       root.innerHTML = t ? `<div class="overlay" data-act="overlay-close"><div class="sheet" data-stop="1">${renderTaskSheet(t)}</div></div>` : '';
+      decorateModal(root);
       return;
     }
     let body = '';
     if (modal.type === 'create-group') {
-      body = `<div class="sheet-head"><div><h2>创建新小组</h2><div class="sub">建组字段：组名、关联课程、成员上限</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>创建新小组</h2><div class="sub">建组字段：组名、关联课程、成员上限</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         <div class="field"><label>组名</label><input id="g-name" placeholder="例如：第四小组 · 用户研究"></div>
         <div class="field"><label>关联课程（可选）</label><input id="g-course" placeholder="例如：产品设计基础"></div>
         <div class="inline-fields"><div class="field"><label>成员上限</label><input id="g-limit" type="number" min="2" max="30" value="8"></div>
         <div class="field"><label>入组需确认</label><select id="g-confirm"><option value="1">是（默认）</option><option value="0">否</option></select></div></div>
         <button class="btn block" data-act="create-group">创建并进入</button>`;
     } else if (modal.type === 'join') {
-      body = `<div class="sheet-head"><div><h2>用邀请码入组</h2><div class="sub">6 位邀请码，7 天有效</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>用邀请码入组</h2><div class="sub">6 位邀请码，7 天有效</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         <div class="field"><label>邀请码</label><input id="join-code" maxlength="6" placeholder="例如 A7K29Q" style="letter-spacing:.2em;text-transform:uppercase"></div>
         <p class="muted">提示：默认邀请码是 <b>A7K29Q</b>。该组已开启「入组需组长确认」，输入后只是提交申请，需组长在「成员」页点「同意」才真正入组。若组长点过「生成新的」，旧码会立即失效，请使用成员页显示的新码。</p>
         <button class="btn block" data-act="join-group">申请加入</button>`;
     } else if (modal.type === 'invite') {
       const g = group(ui.groupId);
       const inv = state.invites.find((i) => i.groupId === g.id && i.active);
-      body = `<div class="sheet-head"><div><h2>邀请成员</h2><div class="sub">分享链接在微信内可直接打开小程序</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>邀请成员</h2><div class="sub">分享链接在微信内可直接打开小程序</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         ${inv ? `<div class="code-box"><b>${esc(inv.code)}</b><button class="btn xs ghost" data-act="copy-code" data-code="${inv.code}">复制邀请码</button></div>` : `<p class="muted">尚无有效邀请码</p>`}
         <div class="field"><label>分享链接（模拟）</label><input readonly value="https://hackathon.demo/join?code=${inv ? inv.code : '------'}"></div>
         <button class="btn ghost block" data-act="invite-create">重新生成邀请码</button>`;
     } else if (modal.type === 'reject') {
-      body = `<div class="sheet-head"><div><h2>打回任务</h2><div class="sub">打回理由必填，任务回到「进行中」</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>打回任务</h2><div class="sub">打回理由必填，任务回到「进行中」</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         <div class="field"><label>打回理由 <span style="color:var(--danger)">*</span></label><textarea id="reject-reason" placeholder="请说明需要修改的内容…"></textarea></div>
         <button class="btn danger block" data-act="do-reject" data-id="${modal.id}">确认打回</button>`;
     } else if (modal.type === 'final-submit') {
       const g = group(ui.groupId);
-      const a = currentAssignment(g.id);
-      body = `<div class="sheet-head"><div><h2>${modal.force ? '强制提交' : '生成统一提交'}</h2><div class="sub">${esc(a.title)} · 写入不可变快照</div></div><button class="close-x" data-act="close-modal">×</button></div>
-        ${modal.force ? `<div class="field"><label>强制提交理由 <span style="color:var(--danger)">*</span></label><textarea id="final-reason" placeholder="仍有任务未完成，请说明原因…"></textarea></div>` : `<p class="muted">将汇总全部任务的最新交付物版本、任务状态、时间戳与提交人，生成不可变快照。</p>`}
+      const a = selectedAssignment(g.id);
+      body = `<div class="sheet-head"><div><h2>${modal.force ? '强制提交' : '生成最终提交'}</h2><div class="sub">${esc(a.title)} · 写入存档</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
+        ${modal.force ? `<div class="field"><label>强制提交理由 <span style="color:var(--danger)">*</span></label><textarea id="final-reason" placeholder="仍有任务未完成，请说明原因…"></textarea></div>` : `<p class="muted">将汇总全部任务的最新成果版本、任务状态、时间戳与提交人，生成存档。</p>`}
         <button class="btn block" data-act="do-final-submit">确认提交</button>`;
     } else if (modal.type === 'email') {
-      body = `<div class="sheet-head"><div><h2>邮箱验证码登录</h2><div class="sub">微信外 H5 兜底方案 · 验证码 60s 限频</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>邮箱验证码登录</h2><div class="sub">没有微信也能用邮箱登录 · 验证码 60 秒后可重发</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         <div class="field"><label>邮箱</label><input id="email-input" type="email" placeholder="name@example.edu" value="${esc((state.users[4] || state.users[0] || {}).email || '')}"></div>
         <div class="field"><label>验证码</label><input id="code-input" placeholder="6 位验证码"><div class="hint" id="code-hint">点击发送后，演示验证码会显示在提示中</div></div>
         <div class="btn-row"><button class="btn ghost" id="send-code-btn" data-act="send-code">发送验证码</button><button class="btn" data-act="email-do-login">登录</button></div>`;
     } else if (modal.type === 'switch') {
-      body = `<div class="sheet-head"><div><h2>切换演示身份</h2><div class="sub">体验组长与成员的不同操作权限</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>切换演示身份</h2><div class="sub">体验组长与成员的不同操作权限</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         ${state.users.map((u) => `<button class="btn plain block sm" style="margin-bottom:7px;justify-content:flex-start" data-act="pick-user" data-id="${u.id}"><span class="avatar sm" style="background:${u.color}">${esc(u.name[0])}</span>${esc(u.name)}${state.session === u.id ? '（当前）' : ''}</button>`).join('')}
         <button class="btn ghost block sm" style="margin-top:10px" data-act="email-login-open">使用邮箱验证码登录</button>`;
     } else if (modal.type === 'transfer') {
-      body = `<div class="sheet-head"><div><h2>转让组长</h2><div class="sub">转让后你将变为普通成员</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>转让组长</h2><div class="sub">转让后你将变为普通成员</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         <p style="font-size:13px">确认将组长转让给 <b>${esc(user(modal.id).name)}</b>？</p>
         <button class="btn danger block" data-act="do-transfer" data-id="${modal.id}">确认转让</button>`;
+    } else if (modal.type === 'delete-group') {
+      const g = group(modal.id);
+      const f = modal.facts;
+      const fact = (label, n) => `<div class="del-fact"><b>${n}</b><span>${label}</span></div>`;
+      body = `<div class="sheet-head"><div><h2>删除小组</h2><div class="sub">不可撤销 · 仅组长可操作</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
+        <p style="font-size:13px;margin:0 0 10px">确认删除 <b>${esc(g ? g.name : modal.id)}</b>？${f ? `组内 ${f.members} 名成员将立即失去访问权限。` : ''}</p>
+        ${f ? `<div class="del-facts">
+          ${fact('作业', f.assignments)}${fact('任务', f.tasks)}${fact('成果版本', f.deliverables)}
+          ${fact('最终提交', f.finals)}${fact('提醒记录', f.bKnown ? f.jobs : '—')}${fact('逾期提醒', f.bKnown ? f.cards : '—')}
+        </div>
+        <div class="del-warn">以上数据将被永久清除，无法恢复。${f.bOnline && !f.bKnown ? '该组作业还没有生成提醒计划，暂时没有提醒与逾期记录。' : ''}</div>
+        <p class="del-note">小组记录中的 ${f.events} 条历史会保留，便于日后回溯。</p>
+        ${f.bOnline ? '' : `<div class="del-warn">提醒服务暂时不可用：本次先删除小组数据，提醒与逾期记录会在服务恢复后自动清理。</div>`}`
+        : `<p class="muted">正在统计删除影响…</p>`}
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn ghost" data-act="close-modal">取消</button>
+          <button class="btn danger" data-act="do-delete-group" data-id="${modal.id}" ${f ? '' : 'disabled'}>确认删除</button>
+        </div>`;
     } else if (modal.type === 'reassign') {
       const t = task(modal.id);
-      body = `<div class="sheet-head"><div><h2>转派任务</h2><div class="sub">${esc(t.title)} · 仅组长或当前负责人可发起</div></div><button class="close-x" data-act="close-modal">×</button></div>
+      body = `<div class="sheet-head"><div><h2>转派任务</h2><div class="sub">${esc(t.title)} · 仅组长或当前负责人可发起</div></div><button class="close-x" data-act="close-modal" aria-label="关闭">×</button></div>
         ${memberIds(t.groupId).map((id) => `<button class="btn plain block sm" style="margin-bottom:7px" data-act="do-reassign" data-id="${t.id}" data-to="${id}">转给 ${esc(user(id).name)}${id === t.assigneeId ? '（当前负责人）' : ''}</button>`).join('')}`;
     }
     root.innerHTML = `<div class="overlay" data-act="overlay-close"><div class="dialog" data-stop="1">${body}</div></div>`;
+    decorateModal(root);
   }
 
   /* ---------------- 动作处理 ---------------- */
@@ -969,6 +1632,8 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     'only leader can approve': '仅组长可处理入组申请',
     'only leader can deny': '仅组长可处理入组申请',
     'only leader can edit settings': '仅组长可修改小组设置',
+    'only leader can delete group': '仅组长可删除小组',
+    'only leader can review': '仅组长可审核',
     'only leader or assignee can reassign': '仅组长或当前负责人可转派',
     'only assignee can start': '只有负责人可以开始',
     'only author can edit': '只有作者可以编辑',
@@ -977,6 +1642,13 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     'task not found': '任务不存在',
     'comment not found': '评论不存在',
     'draft not found': '草稿不存在',
+    'not committable': '该草稿已创建作业，不能重复创建',
+    'not editable': '作业已创建，草稿不能再编辑',
+    'forbidden': '无权访问该草稿',
+    'leader or creator only': '仅组长或草稿创建者可编辑',
+    'template not found': '模板不存在',
+    'assignment not found': '找不到这份作业，请回首页重新进入',
+    'notification not found': '通知不存在',
     'authentication required': '请先登录'
   };
   const errText = (e) => ERR_ZH[e.message] || e.message || '操作失败';
@@ -1003,6 +1675,134 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
     } finally {
       busy = false;
     }
+  }
+
+  /* ---------------- B 线动作 ---------------- */
+  async function ensureTemplates() {
+    if (bState.templates) return true;
+    try {
+      const r = await bApi('GET', '/v1/templates');
+      bState.templates = r.data.templates;
+      bState.online = true;
+      return true;
+    } catch (_) {
+      bState.online = false;
+      toast('提醒服务暂时连不上，请稍后重试', 'error');
+      return false;
+    }
+  }
+
+  /* ---------------- 删组：A 级联 + B 运行态清理 ---------------- */
+  // B 掉线时删组会留下持续发提醒的孤儿作业：清理失败进内存重试队列，refreshB 探活成功后补清。
+  // 不落 localStorage（本原型约定前端不落业务数据）；跨刷新且 B 长期掉线时需 B 恢复后再删一次同 id 组。
+  const purgeQueue = new Set();
+
+  async function purgeBGroup(gid) {
+    try {
+      const r = await bApi('DELETE', `/v1/internal/groups/${encodeURIComponent(gid)}`);
+      purgeQueue.delete(gid);
+      bState.online = true;
+      return { ok: true, ...r.data };
+    } catch (err) {
+      if (!err.status) bState.online = false; // 网络层失败才判离线；4xx/5xx 说明 B 在线但拒绝
+      purgeQueue.add(gid);
+      return { ok: false, error: errText(err) };
+    }
+  }
+
+  async function drainPurgeQueue() {
+    for (const gid of [...purgeQueue]) await purgeBGroup(gid);
+  }
+
+  // 删除影响计数：A 侧全部取自 refresh 已拉的 state，不额外打接口；
+  // B 侧逐作业查，以里程碑非空为前置——旧演示作业未经 B commit，internal 两端点恒 404。
+  async function deleteFacts(gid) {
+    const asg = state.assignments.filter((a) => a.groupId === gid);
+    const tids = new Set(state.tasks.filter((t) => t.groupId === gid).map((t) => t.id));
+    const f = {
+      assignments: asg.length,
+      tasks: tids.size,
+      deliverables: state.deliverables.filter((d) => tids.has(d.taskId)).length,
+      finals: state.finalSubmissions.filter((s) => s.groupId === gid).length,
+      members: memberIds(gid).length,
+      events: state.events.filter((e) => e.groupId === gid).length,
+      jobs: 0, cards: 0, bKnown: false, bOnline: bState.online !== false,
+    };
+    if (!f.bOnline) return f;
+    for (const a of asg) {
+      const ms = await bApi('GET', `/v1/assignments/${a.id}/milestones`).catch(() => null);
+      if (!ms || !ms.data.milestones.length) continue;
+      f.bKnown = true;
+      const [j, c] = await Promise.all([
+        bApi('GET', `/v1/internal/reminder-jobs?assignmentId=${encodeURIComponent(a.id)}`).catch(() => null),
+        bApi('GET', `/v1/internal/yellow-cards?assignmentId=${encodeURIComponent(a.id)}`).catch(() => null)
+      ]);
+      f.jobs += j ? j.data.jobs.length : 0;
+      f.cards += c ? c.data.cards.length : 0;
+    }
+    return f;
+  }
+
+  async function loadSettings() {
+    render();
+    try {
+      const q = await bApi('GET', '/v1/subscriptions/quota');
+      bState.online = true;
+      bState.quota = q.data;
+    } catch (_) { bState.online = false; }
+    if (ui.view === 'settings') render();
+  }
+
+  function wizCommon() {
+    if (!wiz) return null;
+    if (!wiz.ddl || !Number.isFinite(Date.parse(wiz.ddl))) { toast('请选择最终截止', 'error'); return null; }
+    const finalDdl = fromLocalInput(wiz.ddl);
+    if (Date.parse(finalDdl) <= Date.now()) { toast('最终截止必须晚于当前时间', 'error'); return null; }
+    const taskCount = Number(wiz.taskCount);
+    if (!Number.isInteger(taskCount) || taskCount < 2 || taskCount > 12) { toast('请填写任务分配数量（2–12 整数）', 'error'); return null; }
+    return { groupId: ui.groupId, finalDdl, taskCount };
+  }
+
+  async function wizGo(btn, act) {
+    const base = wizCommon();
+    if (!base || busy) return;
+    if (act === 'wiz-ai') {
+      if (!String(wiz.reqText || '').trim()) { toast('请粘贴作业要求', 'error'); return; }
+      if (String(wiz.reqText).length > 5000) { toast('要求文本过长（≤5000 字）', 'error'); return; }
+    } else if (!wiz.templateId) { toast('请选择模板', 'error'); return; }
+    busy = true;
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = act === 'wiz-ai' ? 'AI 拆解中…' : '生成中…';
+    try {
+      let r;
+      if (act === 'wiz-ai') {
+        r = await bApi('POST', '/v1/assignments/ai-draft', { ...base, requirementsText: wiz.reqText });
+        if (r.headers.get('x-ai-degraded')) {
+          toast('AI 暂时不可用，已改用模板生成草稿，可继续编辑', 'error');
+        } else if (r.headers.get('x-ai-cached')) {
+          toast('已复用上次的拆解结果，草稿已生成', 'success');
+        }
+      } else {
+        const title = String(wiz.title || '').trim();
+        r = await bApi('POST', '/v1/assignments/from-template', { ...base, templateId: wiz.templateId, ...(title ? { title } : {}) });
+      }
+      draft = r.data;
+      draftId = r.data.draftId;
+      draftErrors = [];
+      wiz = null;
+      ui.view = 'confirm';
+      render();
+    } catch (err) {
+      toast(errText(err), 'error');
+      if (btn.isConnected) { btn.disabled = false; btn.textContent = oldText; }
+    } finally { busy = false; }
+  }
+
+  async function draftSave() {
+    const r = await bApi('PUT', '/v1/drafts/' + encodeURIComponent(draftId), draft);
+    draft = r.data;
+    draftErrors = [];
   }
 
   async function handle(act, d, ev) {
@@ -1046,6 +1846,52 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
           toast('演示数据已重置', 'success');
         });
         return;
+      case 'auth-mode': {
+        const email = $('#auth-email'); const name = $('#auth-name');
+        if (email) authForm.email = email.value;
+        if (name) authForm.name = name.value;
+        ui.authMode = d.mode === 'register' ? 'register' : 'login';
+        render();
+        return;
+      }
+      case 'auth-send-code': {
+        const email = $('#auth-email').value.trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('请输入有效邮箱', 'error');
+        if (Date.now() < emailCooldownUntil) return toast('发送过于频繁，请 60 秒后再试', 'error');
+        try {
+          // devCode 只是演示回显；真实环境验证码只进邮件，绝不出响应体。
+          const r = await api('POST', '/v1/auth/email-code', { email });
+          emailCooldownUntil = Date.now() + 60000;
+          toast('演示验证码：' + r.devCode, 'success');
+          const hint = $('#auth-code-hint');
+          if (hint) hint.textContent = '演示验证码：' + r.devCode + '（60 秒后可重发）';
+          const btn = $('#auth-send-btn');
+          if (btn) {
+            btn.disabled = true; btn.textContent = '60s 后重发';
+            setTimeout(() => { if (btn.isConnected) { btn.disabled = false; btn.textContent = '发送验证码'; } }, 60000);
+          }
+        } catch (err) { toast(errText(err), 'error'); }
+        return;
+      }
+      case 'auth-login':
+      case 'auth-register': {
+        const register = act === 'auth-register';
+        const email = $('#auth-email').value.trim();
+        const code = $('#auth-code').value.trim();
+        const name = register ? $('#auth-name').value.trim() : '';
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('请输入有效邮箱', 'error');
+        if (!code) return toast('请输入验证码', 'error');
+        if (register && (name.length < 2 || name.length > 12)) return toast('昵称需 2–12 个字符', 'error');
+        await mutate(async () => {
+          // 契约 email-login：首次出现的邮箱自动建档；注册时额外带 name 作为昵称（decisions #28）。
+          const r = await api('POST', '/v1/auth/email-login', register ? { email, code, name } : { email, code });
+          token = r.token; state.session = r.userId; saveSession();
+          authForm = { email: '', name: '' };
+          modal = null; ui.view = 'groups'; ui.tab = 'board'; ui.groupId = null; ui.assignmentId = null;
+          toast(register ? `注册成功，欢迎 ${name}` : '登录成功，已进入首页', 'success');
+        });
+        return;
+      }
       case 'email-login-open': modal = { type: 'email' }; renderModal(); return;
       case 'send-code': {
         const email = $('#email-input').value.trim();
@@ -1056,7 +1902,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
           const r = await api('POST', '/v1/auth/email-code', { email });
           emailCooldownUntil = Date.now() + 60000;
           toast('演示验证码：' + r.devCode, 'success');
-          $('#code-hint').textContent = '演示验证码：' + r.devCode + '（60s 限频已生效）';
+          $('#code-hint').textContent = '演示验证码：' + r.devCode + '（60 秒后可重发）';
           const btn = $('#send-code-btn'); btn.disabled = true; btn.textContent = '60s 后重发';
           setTimeout(() => { if (btn.isConnected) { btn.disabled = false; btn.textContent = '发送验证码'; } }, 60000);
         } catch (err) { toast(errText(err), 'error'); }
@@ -1074,9 +1920,21 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         });
         return;
       }
-      case 'back-groups': ui.view = 'groups'; ui.tab = 'board'; modal = null; render(); return;
-      case 'open-group': ui.groupId = d.id; ui.view = 'group'; ui.tab = 'board'; render(); return;
-      case 'tab': ui.tab = d.tab; render(); return;
+      case 'back-groups': ui.view = 'groups'; ui.tab = 'board'; modal = null; wiz = null; draft = null; draftId = null; draftErrors = []; render(); return;
+      case 'back-group': ui.view = 'group'; render(); return;
+      case 'open-group':
+        ui.groupId = d.id; ui.view = 'group'; ui.tab = 'board';
+        ui.assignmentId = (state.assignments.find((a) => a.groupId === d.id) || {}).id || null;
+        render(); return;
+      case 'tab':
+        ui.tab = d.tab; render();
+        if (d.tab === 'time') { await refreshB(); render(); }
+        if (d.tab === 'contrib') {
+          const g = group(ui.groupId);
+          const a = g && selectedAssignment(g.id);
+          if (a) await ensureTaskContent(state.tasks.filter((t) => t.groupId === g.id && t.assignmentId === a.id));
+        }
+        return;
       case 'create-group-open': modal = { type: 'create-group' }; renderModal(); return;
       case 'create-group': {
         const name = $('#g-name').value.trim();
@@ -1111,9 +1969,17 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         });
         return;
       case 'copy-code': {
-        const code = d.code;
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(() => toast('已复制 ' + code), () => toast('邀请码：' + code));
-        else toast('邀请码：' + code);
+        const code = d.code || '';
+        if (await copyText(code)) return toast('已复制邀请码 ' + code, 'success');
+        // 自动复制全部失败时选中窗口里的邀请码，用户按 Ctrl/⌘+C 即可
+        const node = ev && ev.target.closest('.code-box') && ev.target.closest('.code-box').querySelector('b');
+        if (node) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(range);
+        }
+        toast('浏览器未允许自动复制，已选中邀请码，请按 Ctrl/⌘+C', 'error');
         return;
       }
       case 'toggle-confirm': {
@@ -1152,6 +2018,30 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
           toast('组长已转让', 'success');
         });
         return;
+      case 'delete-group-open': {
+        const target = d.id || gid;
+        if (!isLeader(target)) return toast('仅组长可删除小组', 'error');
+        modal = { type: 'delete-group', id: target, facts: null };
+        renderModal();
+        const facts = await deleteFacts(target);
+        if (modal && modal.type === 'delete-group' && modal.id === target) { modal.facts = facts; renderModal(); }
+        return;
+      }
+      case 'do-delete-group': {
+        const target = d.id || (modal && modal.id);
+        if (!target || !isLeader(target)) return toast('仅组长可删除小组', 'error');
+        const name = group(target) ? group(target).name : target;
+        await mutate(async () => {
+          // 先清 B 再删 A：B 要借 A 现存任务 id 才能清干净任务级 @ / 打回通知
+          const purge = await purgeBGroup(target);
+          const r = await api('DELETE', `/v1/groups/${target}`);
+          modal = null;
+          if (ui.groupId === target) { ui.groupId = null; ui.view = 'groups'; ui.tab = 'board'; ui.assignmentId = null; }
+          if (purge.ok) toast(`已删除「${name}」：${r.assignments} 个作业、${r.tasks} 个任务，${purge.jobs} 条提醒与 ${purge.cards} 条逾期记录一并清除`, 'success');
+          else toast(`「${name}」已删除，但提醒记录暂时没清干净：服务恢复后本页会自动清理`, 'error');
+        });
+        return;
+      }
       case 'open-task':
         ui.taskId = d.id; modal = { type: 'task', id: d.id }; renderModal();
         try { await loadTaskDetail(d.id); renderModal(); }
@@ -1168,7 +2058,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         return;
       case 'submit-review': {
         // 「先有交付物才能提交审核」目前只有前端校验，服务端未设守卫——登记 v1.1 会签。
-        if (!taskDeliverables(d.id).length) return toast('请先挂载至少一个交付物链接', 'error');
+        if (!taskDeliverables(d.id).length) return toast('请先添加至少一个成果链接', 'error');
         await mutate(async () => {
           await api('POST', `/v1/tasks/${d.id}/submit`);
           toast('已提交审核', 'success');
@@ -1187,14 +2077,23 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         });
         return;
       }
-      case 'approve':
+      case 'approve': {
+        const t = task(d.id);
+        if (!t || !isLeader(t.groupId)) return toast('仅组长可审核', 'error');
         await mutate(async () => {
           await api('POST', `/v1/tasks/${d.id}/reviews`, { action: 'approve' });
           toast('审核通过', 'success');
         });
         return;
-      case 'reject-open': modal = { type: 'reject', id: d.id }; renderModal(); return;
+      }
+      case 'reject-open': {
+        const t = task(d.id);
+        if (!t || !isLeader(t.groupId)) return toast('仅组长可审核', 'error');
+        modal = { type: 'reject', id: d.id }; renderModal(); return;
+      }
       case 'do-reject': {
+        const t = task(d.id);
+        if (!t || !isLeader(t.groupId)) return toast('仅组长可审核', 'error');
         const reason = $('#reject-reason').value.trim();
         if (!reason) return toast('打回必须填写理由', 'error');
         await mutate(async () => {
@@ -1213,7 +2112,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         const type = sel === '自动识别' ? urlType(url) : sel;
         await mutate(async () => {
           const r = await api('POST', `/v1/tasks/${d.id}/deliverables`, { url, title, type });
-          toast('交付物 v' + r.version + ' 已保存', 'success');
+          toast('成果 v' + r.version + ' 已保存', 'success');
         });
         return;
       }
@@ -1246,7 +2145,7 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
       }
       case 'final-submit-open': modal = { type: 'final-submit', force: d.force === '1' }; renderModal(); return;
       case 'do-final-submit': {
-        const a = currentAssignment(gid);
+        const a = selectedAssignment(gid);
         if (!a) return toast('该小组还没有作业', 'error');
         const unfinished = state.tasks.filter((t) => t.groupId === gid && t.status !== 'done');
         let forceReason;
@@ -1256,8 +2155,8 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         }
         await mutate(async () => {
           await api('POST', `/v1/assignments/${a.id}/final-submissions`, forceReason ? { forceReason } : {});
-          modal = null; ui.tab = 'submit';
-          toast('不可变快照已生成', 'success');
+          modal = null; ui.tab = 'contrib';
+          toast('最终提交已生成存档', 'success');
         });
         return;
       }
@@ -1267,35 +2166,250 @@ kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; 
         try {
           // 回服务端重读快照，而不是拿前端缓存自证——不可变性要由记录系统背书。
           const remote = await api('GET', `/v1/assignments/${s.assignmentId}/final-submissions/latest`);
-          if (remote.id !== s.id) return toast('已有更新的快照，当前展示的是历史快照', 'success');
+          if (remote.id !== s.id) return toast('已有更新的存档，当前展示的是历史存档', 'success');
           const current = state.tasks.filter((t) => t.groupId === s.groupId).map((t) => [t.id, t.status]);
           const snap = remote.tasks.map((t) => [t.id, toViewStatus(t)]);
-          if (JSON.stringify(current) === JSON.stringify(snap)) toast('校验通过：快照与当前状态一致', 'success');
-          else toast('已检测到状态变化，但快照内容保持不变 ✓', 'success');
+          if (JSON.stringify(current) === JSON.stringify(snap)) toast('校验通过：存档与当前状态一致', 'success');
+          else toast('检测到任务状态已变化，但存档内容保持不变 ✓', 'success');
         } catch (err) { toast(errText(err), 'error'); }
         return;
       }
+      /* ---- B 线：通知中心 / 设置 ---- */
+      case 'open-notifications':
+        ui.view = 'notifications'; render();
+        await refreshB(); render();
+        return;
+      case 'open-settings': ui.view = 'settings'; await loadSettings(); return;
+      case 'settings-reload': await loadSettings(); return;
+      case 'note-read':
+        try {
+          await bApi('POST', `/v1/notifications/${encodeURIComponent(d.id)}/read`);
+          await refreshB(); render();
+          toast('已标记已读', 'success');
+        } catch (err) { toast(errText(err), 'error'); }
+        return;
+
+      /* ---- B 线：时间页签（提醒重算 / 补扫） ---- */
+      case 'schedule-refresh':
+        try {
+          const r = await bApi('POST', '/v1/internal/schedule/refresh', { assignmentId: d.aid });
+          await refreshB(); render();
+          toast('提醒已重算，待发 ' + r.data.pending + ' 条', 'success');
+        } catch (err) { toast(errText(err), 'error'); }
+        return;
+      case 'schedule-tick':
+        try {
+          const r = await bApi('POST', '/v1/internal/schedule/tick');
+          await refreshB(); render();
+          const sent = (r.data.dispatched && r.data.dispatched.sent) || 0;
+          const yc = (r.data.yellowcards && r.data.yellowcards.created) || 0;
+          const auto = r.data.autoAssigned || 0;
+          toast('检查完成：已发送 ' + sent + ' 条提醒' + (auto ? '，自动分配 ' + auto + ' 个任务' : '') + (yc ? '，新增 ' + yc + ' 条逾期提醒' : ''), 'success');
+        } catch (err) { toast(errText(err), 'error'); }
+        return;
+
+      /* ---- B 线：建作业向导 ---- */
+      case 'open-wizard': {
+        if (!isLeader(gid)) return toast('仅组长可建作业', 'error');
+        if (!(await ensureTemplates())) return;
+        wiz = {
+          mode: 'ai', ddl: defaultDdlInput(),
+          taskCount: Math.min(12, Math.max(2, memberIds(gid).length)),
+          reqText: '', templateId: (bState.templates[0] || {}).id || '', title: ''
+        };
+        ui.view = 'wizard'; render();
+        return;
+      }
+      case 'wiz-mode':
+        if (!wiz) return;
+        wiz.mode = d.mode;
+        if (d.mode === 'tpl' && !(await ensureTemplates())) return;
+        render();
+        return;
+      case 'wiz-count': {
+        if (!wiz) return;
+        const cur = Number(wiz.taskCount);
+        const next = (Number.isFinite(cur) ? Math.round(cur) : 4) + Number(d.delta || 0);
+        wiz.taskCount = Math.min(12, Math.max(2, next));
+        render();
+        return;
+      }
+      case 'wiz-count-set':
+        if (!wiz) return;
+        wiz.taskCount = Math.min(12, Math.max(2, Number(d.n) || 4));
+        render();
+        return;
+      case 'wiz-ai':
+      case 'wiz-tpl': await wizGo(ev.target.closest('button'), act); return;
+
+      /* ---- B 线：草稿确认页 ---- */
+      case 'draft-add-task': {
+        if (!draft) return;
+        let n = 1;
+        const keys = new Set(draft.tasks.map((t) => t.key));
+        while (keys.has('t' + n)) n++;
+        draft.tasks.push({ key: 't' + n, title: '新任务' + n, description: '', deliverableSpec: '外部文档链接', estimatedLoad: 2, due: draft.assignment.finalDdl, dependsOn: [] });
+        render(); return;
+      }
+      case 'draft-del-task': {
+        if (!draft) return;
+        if (draft.tasks.length <= 2) return toast('至少保留 2 个任务', 'error');
+        draft.tasks.splice(Number(d.i), 1);
+        render(); return;
+      }
+      case 'draft-add-ms':
+        if (!draft) return;
+        draft.milestones.push({ name: '新关键节点', due: draft.assignment.finalDdl });
+        render(); return;
+      case 'draft-del-ms':
+        if (!draft) return;
+        if (draft.milestones.length <= 1) return toast('至少保留 1 个关键节点', 'error');
+        draft.milestones.splice(Number(d.i), 1);
+        render(); return;
+      case 'draft-ms-up': {
+        const i = Number(d.i);
+        if (!draft || i <= 0) return;
+        [draft.milestones[i - 1], draft.milestones[i]] = [draft.milestones[i], draft.milestones[i - 1]];
+        render(); return;
+      }
+      case 'draft-ms-down': {
+        const i = Number(d.i);
+        if (!draft || i >= draft.milestones.length - 1) return;
+        [draft.milestones[i + 1], draft.milestones[i]] = [draft.milestones[i], draft.milestones[i + 1]];
+        render(); return;
+      }
+      case 'draft-save':
+        if (!draft || busy) return;
+        busy = true;
+        try { await draftSave(); toast('草稿已保存', 'success'); render(); }
+        catch (err) { draftErrors = (err.body && err.body.errors) || [errText(err)]; toast(errText(err), 'error'); render(); }
+        finally { busy = false; }
+        return;
+      case 'draft-commit':
+        if (!draft || busy) return;
+        busy = true;
+        try {
+          await draftSave();
+          const r = await bApi('POST', '/v1/drafts/' + encodeURIComponent(draftId) + '/commit');
+          const aid = r.data.assignmentId;
+          draft = null; draftId = null; draftErrors = []; wiz = null;
+          ui.assignmentId = aid; ui.view = 'group'; ui.tab = 'board';
+          await refresh(); render();
+          toast('作业已创建，任务已进入看板，关键节点与提醒已安排好', 'success');
+        } catch (err) {
+          draftErrors = (err.body && err.body.errors) || [];
+          toast(errText(err), 'error');
+          render();
+        } finally { busy = false; }
+        return;
       default: return;
     }
   }
 
   /* ---------------- 事件绑定与启动 ---------------- */
+  const TAB_ACTS = new Set(['tab', 'wiz-mode', 'auth-mode']);
+  function refocusAct(el) {
+    const { act, tab = '', mode = '' } = el.dataset;
+    requestAnimationFrame(() => {
+      const next = [...document.querySelectorAll(`[data-act="${act}"]`)]
+        .find((x) => (x.dataset.tab || x.dataset.mode || '') === (tab || mode));
+      if (next) next.focus({ preventScroll: true });
+    });
+  }
   document.addEventListener('click', (e) => {
+    // 可点击行内的外链（如贡献页的交付物）优先按链接打开，不被 data-act 行劫持。
+    if (e.target.closest('a')) return;
     const el = e.target.closest('[data-act]');
     if (!el) return;
     if (el.dataset.act === 'overlay-close' && e.target.closest('[data-stop]')) return;
     e.preventDefault();
+    lastActivation = el;
+    Promise.resolve(handle(el.dataset.act, el.dataset, e))
+      .then(() => { if (TAB_ACTS.has(el.dataset.act)) refocusAct(el); })
+      .catch((err) => toast(errText(err), 'error'));
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal) { e.preventDefault(); modal = null; render(); return; }
+    if (e.key === 'Tab' && modal) {
+      const dlg = document.querySelector('#modal-root .sheet, #modal-root .dialog');
+      if (dlg) {
+        const items = [...dlg.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+          .filter((x) => x.offsetParent !== null);
+        if (!items.length) { e.preventDefault(); dlg.focus(); return; }
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === dlg)) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        else if (!dlg.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      }
+    }
+    const tab = e.target.closest && e.target.closest('[role="tab"]');
+    if (tab && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const list = [...tab.parentElement.querySelectorAll('[role="tab"]')];
+      if (list.length > 1) {
+        e.preventDefault();
+        const at = list.indexOf(tab);
+        list[(at + (e.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length].click();
+      }
+      return;
+    }
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    // 卡片等非原生按钮用 Enter/空格激活，和鼠标点击同一套动作处理。
+    const el = e.target.closest && e.target.closest('[role="button"][data-act]');
+    if (!el || e.target !== el) return;
+    e.preventDefault();
+    lastActivation = el;
     Promise.resolve(handle(el.dataset.act, el.dataset, e)).catch((err) => toast(errText(err), 'error'));
   });
 
-  // 轮询承担原 storage 事件的跨标签页同步。弹窗打开时不重渲染，避免抹掉正在输入的内容。
+  // 向导/确认页的输入直写本地编辑态（wiz / draft），不触发重渲染，光标与输入内容不丢。
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'auth-email') { authForm.email = e.target.value; return; }
+    if (e.target.id === 'auth-name') { authForm.name = e.target.value; return; }
+    const bind = e.target.dataset && e.target.dataset.bind;
+    if (!bind) return;
+    const parts = bind.split('.');
+    let obj = parts[0] === 'wiz' ? wiz : draft;
+    if (!obj) return;
+    for (let i = 1; i < parts.length - 1; i++) obj = obj[parts[i]];
+    let v = e.target.value;
+    if (e.target.dataset.time) { if (!v) return; v = fromLocalInput(v); }
+    else if (e.target.dataset.num) v = Number(v);
+    else if (e.target.dataset.list) v = v.split(',').map((s) => s.trim()).filter(Boolean);
+    obj[parts[parts.length - 1]] = v;
+    if (bind === 'wiz.taskCount') syncCountUi();
+  });
+
+  document.addEventListener('change', (e) => {
+    const act = e.target.dataset && e.target.dataset.change;
+    if (!act) return;
+    if (act === 'pick-assignment') {
+      ui.assignmentId = e.target.value; render();
+      if (ui.tab === 'contrib') {
+        const g = group(ui.groupId);
+        if (g) ensureTaskContent(state.tasks.filter((t) => t.groupId === g.id && t.assignmentId === ui.assignmentId)).catch(() => {});
+      }
+    }
+    else if (act === 'toggle-unread') { ui.unreadOnly = e.target.checked; refreshB().then(render); }
+    else if (act === 'pref-email') {
+      try {
+        localStorage.setItem('merged_b_prefs', JSON.stringify({ email: e.target.checked }));
+        toast('偏好已保存（本机）', 'success');
+      } catch (_) { toast('本机存储不可用，偏好未保存', 'error'); }
+    }
+  });
+
+  // 轮询承担原 storage 事件的跨标签页同步。弹窗打开时不重渲染，避免抹掉正在输入的内容；
+  // 向导/确认页持有本地编辑态，整段跳过（保存/commit 时自行刷新）。
   setInterval(async () => {
     if (!state.session || modal || busy || document.hidden) return;
+    if (ui.view === 'wizard' || ui.view === 'confirm') return;
     try {
-      const before = JSON.stringify(state);
+      const before = JSON.stringify([state, bState]);
       await refresh();
       apiError = '';
-      if (JSON.stringify(state) !== before) render();
+      if (JSON.stringify([state, bState]) !== before) render();
     } catch (err) {
       if (err.status === 401) { dropSession(); ui.view = 'login'; render(); }
     }

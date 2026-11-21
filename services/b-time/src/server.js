@@ -14,6 +14,7 @@ import { registerInternal } from './routes/internal.js';
 import { createScheduler } from './core/scheduler.js';
 import { createDispatcher } from './core/dispatcher.js';
 import { createYellowCardService } from './core/yellowcard.js';
+import { createAutoAssigner } from './core/auto-assign.js';
 
 const H5_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/web-h5');
 const MIME = {
@@ -22,6 +23,16 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
 };
+
+// 开发期跨源放行：合并页以 file:// 打开，源为 null，需与 mock 一致的 CORS 才能调 B 独占端点。
+// 与 /dev/a 代理同一道闸（SESSION_MODE=jwt 即关闭），生产不放开（docs/decisions.md #16）。
+const DEV_CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'access-control-allow-headers': 'content-type,authorization',
+  'access-control-max-age': '86400',
+};
+const corsOn = () => process.env.SESSION_MODE !== 'jwt';
 
 export function createApp({ db }) {
   const routes = [];
@@ -48,7 +59,10 @@ export function createApp({ db }) {
   const server = http.createServer(async (req, res) => {
     const port = server.address()?.port ?? process.env.B_PORT ?? 8788;
     const u = new URL(req.url, `http://127.0.0.1:${port}`);
-    const send = (status, body, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
+    const cors = corsOn() ? DEV_CORS : {};
+    const send = (status, body, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...cors, ...headers }); res.end(JSON.stringify(body)); };
+
+    if (req.method === 'OPTIONS' && corsOn()) { res.writeHead(204, DEV_CORS); return res.end(); }
 
     // H5 静态托管（公开；页面内 API 调用仍走鉴权）
     if (req.method === 'GET' && (u.pathname === '/h5' || u.pathname === '/h5/' || u.pathname.startsWith('/h5/'))) {
@@ -79,7 +93,7 @@ export function createApp({ db }) {
           signal: AbortSignal.timeout(5000),
         });
         const text = await r.text();
-        res.writeHead(r.status, { 'content-type': r.headers.get('content-type') || 'application/json' });
+        res.writeHead(r.status, { 'content-type': r.headers.get('content-type') || 'application/json', ...cors });
         return res.end(text);
       } catch {
         return send(502, { error: 'A 代理失败' });
@@ -117,7 +131,12 @@ if (isMain) {
   registerAssignments({ route, db });
   registerNotifications({ route, db });
   registerSubscriptions({ route, db });
-  const scheduler = createScheduler({ db, dispatcher: createDispatcher({ db }), yellowcards: createYellowCardService({ db }) });
+  const scheduler = createScheduler({
+    db,
+    dispatcher: createDispatcher({ db }),
+    yellowcards: createYellowCardService({ db }),
+    autoAssign: createAutoAssigner({ db }),
+  });
   registerInternal({ route, db, scheduler });
   scheduler.start();
   const port = Number(process.env.B_PORT || 8788);
