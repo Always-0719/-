@@ -72,8 +72,8 @@ export function registerTemplates({ route, db }) {
 
     const draft = buildTemplateDraft({ template, finalDdl, title, requirementsText });
     const now = new Date().toISOString();
-    c.db.prepare(`INSERT INTO drafts (id, group_id, payload, status, created_at, updated_at)
-      VALUES (?, ?, ?, 'preview', ?, ?)`).run(draft.draftId, groupId, JSON.stringify(draft), now, now);
+    c.db.prepare(`INSERT INTO drafts (id, group_id, payload, status, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, 'preview', ?, ?, ?)`).run(draft.draftId, groupId, JSON.stringify(draft), c.uid, now, now);
     return { status: 201, body: draft };
   });
 }
