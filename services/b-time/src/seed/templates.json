@@ -1,0 +1,62 @@
+[
+  {
+    "id": "tpl-pre",
+    "category": "pre",
+    "name": "课堂 Pre",
+    "draftTemplate": {
+      "tasks": [
+        { "key": "t1", "title": "资料调研与大纲", "description": "收集主题资料，产出展示大纲与分工建议", "deliverableSpec": "大纲文档链接", "estimatedLoad": 2, "dueFraction": 0.3, "dependsOn": [] },
+        { "key": "t2", "title": "PPT 制作", "description": "按大纲制作幻灯片，统一视觉风格", "deliverableSpec": "PPT 链接（腾讯文档/飞书）", "estimatedLoad": 3, "dueFraction": 0.55, "dependsOn": ["t1"] },
+        { "key": "t3", "title": "讲稿与排练", "description": "撰写讲稿并组织至少一次完整排练", "deliverableSpec": "讲稿链接 + 排练记录", "estimatedLoad": 2, "dueFraction": 0.75, "dependsOn": ["t2"] },
+        { "key": "t4", "title": "现场展示准备", "description": "确认设备、时长与问答预案", "deliverableSpec": "检查清单勾选记录", "estimatedLoad": 1, "dueFraction": 0.9, "dependsOn": ["t3"] }
+      ],
+      "deliveryChecklist": ["PPT 终版链接", "讲稿", "排练记录", "问答预案"]
+    },
+    "milestoneRule": { "engine": "default", "names": ["初稿", "组内审核", "排练整合", "提交"] }
+  },
+  {
+    "id": "tpl-report",
+    "category": "report",
+    "name": "调研报告",
+    "draftTemplate": {
+      "tasks": [
+        { "key": "t1", "title": "文献综述与问卷设计", "description": "梳理文献，设计问卷或访谈提纲", "deliverableSpec": "问卷链接 / 访谈提纲", "estimatedLoad": 2, "dueFraction": 0.25, "dependsOn": [] },
+        { "key": "t2", "title": "数据收集", "description": "投放问卷 / 执行访谈，回收有效样本", "deliverableSpec": "原始数据表链接", "estimatedLoad": 3, "dueFraction": 0.5, "dependsOn": ["t1"] },
+        { "key": "t3", "title": "数据分析", "description": "统计分析与图表制作，提炼结论", "deliverableSpec": "分析图表与结论摘要", "estimatedLoad": 3, "dueFraction": 0.7, "dependsOn": ["t2"] },
+        { "key": "t4", "title": "报告撰写与校对", "description": "成稿、组内互校、格式与引用规范检查", "deliverableSpec": "报告文档链接（终稿）", "estimatedLoad": 4, "dueFraction": 0.9, "dependsOn": ["t3"] }
+      ],
+      "deliveryChecklist": ["报告终稿", "原始数据", "分析图表", "引用清单"]
+    },
+    "milestoneRule": { "engine": "default", "names": ["初稿", "组内审核", "排练整合", "提交"] }
+  },
+  {
+    "id": "tpl-code",
+    "category": "code",
+    "name": "代码项目",
+    "draftTemplate": {
+      "tasks": [
+        { "key": "t1", "title": "需求分析与技术设计", "description": "明确功能范围，产出接口与数据结构设计", "deliverableSpec": "设计文档链接", "estimatedLoad": 2, "dueFraction": 0.25, "dependsOn": [] },
+        { "key": "t2", "title": "核心功能实现", "description": "按设计实现主干功能，提交可运行版本", "deliverableSpec": "GitHub 仓库链接 + 可运行说明", "estimatedLoad": 4, "dueFraction": 0.55, "dependsOn": ["t1"] },
+        { "key": "t3", "title": "测试与缺陷修复", "description": "编写测试用例，修复阻塞缺陷", "deliverableSpec": "测试报告 / CI 通过记录", "estimatedLoad": 3, "dueFraction": 0.75, "dependsOn": ["t2"] },
+        { "key": "t4", "title": "文档与部署", "description": "README、使用文档与演示环境部署", "deliverableSpec": "README + 演示环境链接", "estimatedLoad": 2, "dueFraction": 0.9, "dependsOn": ["t3"] }
+      ],
+      "deliveryChecklist": ["仓库链接", "README", "测试报告", "演示环境"]
+    },
+    "milestoneRule": { "engine": "default", "names": ["初稿", "组内审核", "排练整合", "提交"] }
+  },
+  {
+    "id": "tpl-video",
+    "category": "video",
+    "name": "视频制作",
+    "draftTemplate": {
+      "tasks": [
+        { "key": "t1", "title": "脚本与分镜", "description": "撰写脚本、分镜表与拍摄计划", "deliverableSpec": "脚本 + 分镜表链接", "estimatedLoad": 2, "dueFraction": 0.25, "dependsOn": [] },
+        { "key": "t2", "title": "素材拍摄", "description": "按计划拍摄素材并整理归档", "deliverableSpec": "素材网盘链接", "estimatedLoad": 3, "dueFraction": 0.5, "dependsOn": ["t1"] },
+        { "key": "t3", "title": "剪辑与后期", "description": "粗剪、精剪、字幕与配乐", "deliverableSpec": "成片链接（含版本号）", "estimatedLoad": 4, "dueFraction": 0.75, "dependsOn": ["t2"] },
+        { "key": "t4", "title": "审片与发布", "description": "组内审片、按意见修改、按要求发布", "deliverableSpec": "发布链接 + 审片记录", "estimatedLoad": 2, "dueFraction": 0.9, "dependsOn": ["t3"] }
+      ],
+      "deliveryChecklist": ["成片终版", "脚本", "素材归档", "审片记录"]
+    },
+    "milestoneRule": { "engine": "default", "names": ["初稿", "组内审核", "排练整合", "提交"] }
+  }
+]

@@ -35,7 +35,11 @@
 - 结论：USE_MOCK_A/C=true（默认）走 A_BASE_URL/C_BASE_URL（默认 e2e mock 8787）；false 必须配 A_REAL_URL/C_REAL_URL，缺失显式报错。writeEvent 先以 B 内薄客户端实现（幂等 eventId + 重试 3 次 + 本地 jsonl 队列补传），联调点 1 换 C 官方 SDK，接口形状不变。
 - 影响接口：B 对 A/C 的全部消费经 deps/a-client、deps/c-client 唯一出口。
 
-## 9. 待登记（后续步骤产生）
+## 9. 2026-11-21 · B 线 · 模板任务集与 memberCount
+- 结论：模板任务集为运营 curated 固定拆解（每类 4 任务、含负载/交付规格/依赖/交付清单），任务 due 按总时长比例（dueFraction）生成；memberCount 仅校验 1–8 并记录，不缩放任务数（认领制，与 mock 的 memberCount+1 策略不同，mock 仅作契约替身不约束实现）。
+- 影响接口：POST /v1/assignments/from-template。
+
+## 10. 待登记（后续步骤产生）
 - fromDraft 幂等键缺口（步骤 8 workaround：重试前查 A internal/tasks 判存）。
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

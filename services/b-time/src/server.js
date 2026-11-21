@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb, migrate } from './db.js';
 import { parseSession } from './deps/session.js';
+import { registerTemplates } from './routes/templates.js';
 
 export function createApp({ db }) {
   const routes = [];
@@ -41,12 +42,13 @@ export function createApp({ db }) {
       try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null; }
       catch { return send(400, { error: 'bad json' }); }
     }
-    const ctx = { params: m.params, query: Object.fromEntries(u.searchParams), body, uid: null, db };
+    const ctx = { params: m.params, query: Object.fromEntries(u.searchParams), body, uid: null, token: null, db };
     // internal 端点 MVP 仅内网可达（docs/decisions.md #3），不做应用层鉴权
     if (!m.r.public && !m.r.internal) {
       const session = parseSession(req);
       if (!session) return send(401, { error: 'unauthorized' });
       ctx.uid = session.uid;
+      ctx.token = session.token;
     }
     try {
       const out = await m.r.handler(ctx);
@@ -63,7 +65,8 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
   const db = openDb();
   migrate(db);
-  const { server } = createApp({ db });
+  const { server, route } = createApp({ db });
+  registerTemplates({ route, db });
   const port = Number(process.env.B_PORT || 8788);
   server.listen(port, () => console.log(`b-time listening on ${port}`));
 }
