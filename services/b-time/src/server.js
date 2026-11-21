@@ -9,6 +9,7 @@ import { registerTemplates } from './routes/templates.js';
 import { registerDrafts } from './routes/drafts.js';
 import { registerAssignments } from './routes/assignments.js';
 import { registerNotifications } from './routes/notifications.js';
+import { registerInternal } from './routes/internal.js';
 import { createScheduler } from './core/scheduler.js';
 import { createDispatcher } from './core/dispatcher.js';
 
@@ -115,7 +116,9 @@ if (isMain) {
   registerDrafts({ route, db });
   registerAssignments({ route, db });
   registerNotifications({ route, db });
-  createScheduler({ db, dispatcher: createDispatcher({ db }) }).start();
+  const scheduler = createScheduler({ db, dispatcher: createDispatcher({ db }) });
+  registerInternal({ route, db, scheduler });
+  scheduler.start();
   const port = Number(process.env.B_PORT || 8788);
   server.listen(port, () => console.log(`b-time listening on ${port}`));
 }

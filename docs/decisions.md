@@ -90,6 +90,15 @@
 - 文案中性：48h/24h/逾期三版标题 + 逾期"第 N 天"计数，无指责词；黄牌两版文案留步骤 17。
 - 影响接口：新增 B 自主站内信两接口；冻结 8 端点不变。
 
+## 19. 2026-11-21 · B 线 · refresh/notify 落地语义（步骤 14，修订 #17 的 DELETE 取舍）
+- refresh 改为 **cancel+重算**（计划验证要求旧 job 变 cancelled）：pending/failed 标 cancelled；materialize 的 UNIQUE 冲突改 DO UPDATE … WHERE status='cancelled' → 同 key 复活（attempts 归零），sent 行保持（该边界已提醒过）。cancelled 历史留作队列审计。#17 的"整队列 DELETE"作废。
+- refresh 幂等：连续两次 pending 集合（key/fire_at/attempts）一致；响应 {ok,cancelled,created,pending}。
+- notify 请求体形状契约未定义（冻结仅路径、mock no-op），**B 定义并待 A 线接真确认**：{eventId, kind:'mention'|'reject', assignmentId, taskId?, recipients:[uid], text?, actor?}；text 截断 500 字。
+- notify 判重：notifications.event_id + UNIQUE(event_id,user_id)（迁移 006）+ INSERT OR IGNORE → 同事件重试 created=0；即时落通知不经过 job 队列。
+- 文案：mention「评论 @ 了你」含 actor+摘录；reject「交付物被打回」含理由+重提引导，中性。
+- internal 两端点无应用层鉴权（MVP 内网可达，#3）；普通接口仍 401 守卫。
+- 影响接口：POST /v1/internal/schedule/refresh、POST /v1/internal/notify（冻结路径不变，body 形状登记待会签）。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

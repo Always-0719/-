@@ -109,7 +109,7 @@ test('done/review 任务不催，todo/in_progress 催', async () => {
   assert.deepEqual(ids.sort(), ['t3', 't4']);
 });
 
-test('recompute：改 DDL 后旧 job 清空、新 fire_at 正确；连续两次结果一致', async () => {
+test('recompute：改 DDL 后旧 job 变 cancelled、新 fire_at 正确；连续两次结果一致', async () => {
   const due = T0 + 47 * HOUR;
   const s = setup();
   s.seed('a1', due);
@@ -118,16 +118,19 @@ test('recompute：改 DDL 后旧 job 清空、新 fire_at 正确；连续两次�
 
   const newDue = T0 + 10 * DAY;
   s.db.prepare('UPDATE milestones SET due = ? WHERE assignment_id = ?').run(iso(newDue), 'a1');
-  await s.sched.recompute('a1');
-  assert.equal(s.jobs('a1').length, 0); // 新 DDL 在 10 天后，边界未到 → 无 job
+  const r1 = await s.sched.recompute('a1');
+  assert.equal(r1.cancelled, 1);
+  assert.equal(s.jobs('a1').filter(j => j.status === 'pending').length, 0);
+  assert.equal(s.jobs('a1')[0].status, 'cancelled');
   s.setNow(newDue - 47 * HOUR);
   await s.sched.recompute('a1');
-  const js = s.jobs('a1');
+  const js = s.jobs('a1').filter(j => j.status === 'pending');
   assert.equal(js.length, 1);
   assert.equal(js[0].fire_at, iso(newDue - 48 * HOUR));
   const again = await s.sched.recompute('a1');
-  assert.equal(again, 1);
-  assert.deepEqual(s.jobs('a1').map(j => j.dedup_key), js.map(j => j.dedup_key));
+  assert.equal(again.created, 1); // 同 key cancelled 复活，不新增行
+  assert.deepEqual(s.jobs('a1').filter(j => j.status === 'pending').map(j => j.dedup_key), js.map(j => j.dedup_key));
+  assert.equal(s.jobs('a1').length, 2); // 1 cancelled 历史 + 1 pending
 });
 
 test('A 不可用：里程碑仍生成 job', async () => {

@@ -22,7 +22,10 @@ export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, li
   const ins = db.prepare(`INSERT INTO reminder_jobs
     (id, object_kind, object_id, assignment_id, level, channel, fire_at, dedup_key, created_at)
     VALUES (?, ?, ?, ?, ?, 'inapp', ?, ?, ?)
-    ON CONFLICT (dedup_key) DO NOTHING`);
+    ON CONFLICT (dedup_key) DO UPDATE SET
+      status = 'pending', sent_at = NULL, attempts = 0, last_error = NULL,
+      fire_at = excluded.fire_at, created_at = excluded.created_at
+    WHERE reminder_jobs.status = 'cancelled'`);
 
   function materialize(objects, at) {
     let created = 0;
@@ -61,10 +64,12 @@ export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, li
     return { at, created, dispatched };
   }
 
-  // refresh 语义：队列整体重建（历史留在 notifications），pending/cancelled/sent 全清后按当前 due 重算
+  // refresh 语义：未发送（pending/failed）标 cancelled 后重算；同 key 的 cancelled 行被复活，
+  // sent 行保持（该边界已提醒过）；历史 cancelled 留作队列审计
   async function recompute(aid, at = now()) {
-    db.prepare('DELETE FROM reminder_jobs WHERE assignment_id = ?').run(aid);
-    return materialize(await objectsOf(aid), at);
+    const cancelled = db.prepare("UPDATE reminder_jobs SET status = 'cancelled' WHERE assignment_id = ? AND status IN ('pending', 'failed')").run(aid).changes;
+    const created = materialize(await objectsOf(aid), at);
+    return { cancelled, created };
   }
 
   let timer = null;
