@@ -1,0 +1,12 @@
+{
+  "name": "b-time",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "B 线：模板 / AI 拆解 / DDL 倒推 / 提醒 / 黄牌（轻量 Node + node:sqlite，零运行时依赖）",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "migrate": "node --env-file-if-exists=.env src/migrate.js",
+    "test": "node --test test/"
+  }
+}

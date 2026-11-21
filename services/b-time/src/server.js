@@ -1,0 +1,69 @@
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { openDb, migrate } from './db.js';
+import { parseSession } from './deps/session.js';
+
+export function createApp({ db }) {
+  const routes = [];
+  const route = (method, pattern, handler, opts = {}) =>
+    routes.push({ method, parts: pattern.split('/'), handler, ...opts });
+
+  const match = (method, pathname) => {
+    const ps = pathname.split('/');
+    for (const r of routes) {
+      if (r.method !== method || r.parts.length !== ps.length) continue;
+      const params = {};
+      let ok = true;
+      for (let i = 0; i < ps.length; i++) {
+        if (r.parts[i].startsWith(':')) params[r.parts[i].slice(1)] = ps[i];
+        else if (r.parts[i] !== ps[i]) { ok = false; break; }
+      }
+      if (ok) return { r, params };
+    }
+    return null;
+  };
+
+  route('GET', '/healthz', () => ({ status: 200, body: { ok: true, service: 'b-time' } }), { public: true });
+
+  // B 线路由在后续步骤按 templates / drafts / assignments / notifications / subscribe / internal 挂载
+
+  const server = http.createServer(async (req, res) => {
+    const port = server.address()?.port ?? process.env.B_PORT ?? 8788;
+    const u = new URL(req.url, `http://127.0.0.1:${port}`);
+    const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+    const m = match(req.method, u.pathname);
+    if (!m) return send(404, { error: 'no route' });
+    let body = null;
+    if (req.method !== 'GET') {
+      const chunks = [];
+      for await (const ch of req) chunks.push(ch);
+      try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null; }
+      catch { return send(400, { error: 'bad json' }); }
+    }
+    const ctx = { params: m.params, query: Object.fromEntries(u.searchParams), body, uid: null, db };
+    // internal 端点 MVP 仅内网可达（docs/decisions.md #3），不做应用层鉴权
+    if (!m.r.public && !m.r.internal) {
+      const session = parseSession(req);
+      if (!session) return send(401, { error: 'unauthorized' });
+      ctx.uid = session.uid;
+    }
+    try {
+      const out = await m.r.handler(ctx);
+      send(out.status, out.body);
+    } catch (e) {
+      send(500, { error: String(e.message) });
+    }
+  });
+
+  return { server, route };
+}
+
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const db = openDb();
+  migrate(db);
+  const { server } = createApp({ db });
+  const port = Number(process.env.B_PORT || 8788);
+  server.listen(port, () => console.log(`b-time listening on ${port}`));
+}

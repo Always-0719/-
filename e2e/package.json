@@ -1,0 +1,10 @@
+{
+  "name": "@groupwork/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "mock": "node mock/server.js",
+    "test": "node --test",
+    "test:gate2": "node --test gate2-extended.test.js"
+  }
+}
