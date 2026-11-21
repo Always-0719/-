@@ -9,6 +9,7 @@ import { registerTemplates } from './routes/templates.js';
 import { registerDrafts } from './routes/drafts.js';
 import { registerAssignments } from './routes/assignments.js';
 import { registerNotifications } from './routes/notifications.js';
+import { registerSubscriptions } from './routes/subscriptions.js';
 import { registerInternal } from './routes/internal.js';
 import { createScheduler } from './core/scheduler.js';
 import { createDispatcher } from './core/dispatcher.js';
@@ -42,8 +43,6 @@ export function createApp({ db }) {
   };
 
   route('GET', '/healthz', () => ({ status: 200, body: { ok: true, service: 'b-time' } }), { public: true });
-
-  // B 线路由在后续步骤按 templates / drafts / assignments / notifications / subscribe / internal 挂载
 
   const server = http.createServer(async (req, res) => {
     const port = server.address()?.port ?? process.env.B_PORT ?? 8788;
@@ -116,6 +115,7 @@ if (isMain) {
   registerDrafts({ route, db });
   registerAssignments({ route, db });
   registerNotifications({ route, db });
+  registerSubscriptions({ route, db });
   const scheduler = createScheduler({ db, dispatcher: createDispatcher({ db }) });
   registerInternal({ route, db, scheduler });
   scheduler.start();

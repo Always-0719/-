@@ -1,0 +1,1 @@
+ALTER TABLE subscribe_quota ADD COLUMN openid TEXT;

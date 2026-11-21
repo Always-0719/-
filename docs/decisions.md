@@ -108,6 +108,16 @@
 - 走查：桌面全流程（commit→时间线 4 里程碑→通知 8 条含 notify 注入→已读 8→7→未读筛选→设置持久化）；375px iframe 三页 scrollWidth≤375 无溢出、console 零错误。截图未产出（内置浏览器面板隐藏，NATIVE_BROWSER_VIEWPORT_UNAVAILABLE），以数值走查代替，面板打开后可补。
 - 影响接口：无新增；时间线读冻结 milestones，通知读步骤 13 的 B 自主两接口。
 
+## 21. 2026-11-21 · B 线 · 微信通道 + 额度落地（步骤 16，按 R3 结论）
+- R3 结论执行：条件可行但 H5 收不到额度且无 AppID/小程序壳 → `WECHAT_ENABLED` 默认 false；本步交付额度账本 + 收集端点 + 通道降级链 + flag，真机下发顺延（修订建议归档 docs/f17-prd-revision.md）。
+- subscribe_quota 表 001 已建（user_id/remaining CHECK≥0/collected_at NOT NULL）；迁移 007 仅 ADD openid TEXT——openid 由小程序壳 collect 时上报落库，不做 uid 推导（微信登录 uid 无邮箱同规则，仅站内）。
+- 收集/查询端点 B 自主（非冻结）：POST /v1/subscriptions/collect {count? 1..3 默认1, openid? ≤128}，UPSERT 累加 remaining、openid COALESCE 保留；GET /v1/subscriptions/quota → {remaining, collectedAt, wechatEnabled}。flag 关时也可预攒额度。
+- 下发通道序（dispatcher）：站内必发 → 微信（flag 开 且 remaining>0 且 openid）成功扣减并**跳过该用户邮件** → 否则/失败降级邮件。微信失败但邮件成功 → job sent（降级是设计路径非错误）；微信失败且无邮箱 → 计入 errors 走重试，额度不扣。flag 关行为与步骤 13 完全一致（单测锁定）。
+- 适配器零依赖：flag 开无凭证 → outbox/wechat.jsonl（dev 断言）；配齐 APPID/SECRET/TEMPLATE_ID → 最小 API 客户端（access_token 缓存提前 60s 过期、40001/42001 强刷重试一次、errcode≠0 抛带 errcode 错误；43101/20004 触发降级）。模板 data 键位 thing1/thing2 为占位（各截 20 字），tmplId 申请后定稿——R3 缺口清单。
+- 额度记账粒度备忘（R3 §3.4）：PRD 按 user 记 remaining；接真须细化按 (user, template)，MVP 单模板两者等价。
+- live 冒烟（flag 开 outbox 模拟）：+47h 作业 7 job → 1 微信（quota 1→0）+ 6 邮件降级 + 7 站内，全 sent；设置页额度卡接真显示（剩余/最近续订/通道开关），续订按钮禁用留小程序壳引导。
+- 影响接口：新增 B 自主 collect/quota 两接口；冻结 8 端点不变。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

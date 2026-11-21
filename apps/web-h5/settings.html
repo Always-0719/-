@@ -16,20 +16,20 @@
   <h2>通道偏好</h2>
   <label class="chk"><input type="checkbox" id="ch-inapp" checked disabled> 站内信（必发，不可关）</label>
   <label class="chk"><input type="checkbox" id="ch-email"> 邮件兜底（有邮箱时发送）</label>
-  <label class="chk"><input type="checkbox" id="ch-wechat" disabled> 微信订阅消息（步骤 16 接真，R3 结论前关闭）</label>
+  <label class="chk"><input type="checkbox" id="ch-wechat" disabled> 微信订阅消息（服务端开关；H5 无法收集额度，见 R3 报告）</label>
   <button id="save" style="margin-top:10px">保存偏好</button>
   <div class="muted">MVP 偏好存本机浏览器；接真后迁服务端。</div>
 </div>
 
 <div class="card">
   <h2>微信订阅额度</h2>
-  <div class="muted" id="quota">额度：待接真（subscribe_quota 收集端点步骤 16）</div>
-  <p class="yc-body" style="margin-top:8px">一次性订阅消息：每次打开小程序按引导续订攒额度；额度不足自动降级邮件 + 站内，提醒不丢。</p>
-  <button id="renew" class="ghost" disabled>去续订（占位）</button>
+  <div class="muted" id="quota">额度加载中…</div>
+  <p class="yc-body" style="margin-top:8px">一次性订阅消息：每次打开小程序按引导续订攒额度；额度不足自动降级邮件 + 站内，提醒不丢。H5 网页无法调起微信授权（R3），续订请在小程序壳内完成。</p>
+  <button id="renew" class="ghost" disabled>去续订（待小程序壳）</button>
 </div>
 
 <script type="module">
-import { toast } from '/h5/lib/api.js';
+import { toast, bApi, getToken, fmtLocal } from '/h5/lib/api.js';
 const $ = (id) => document.getElementById(id);
 const KEY = 'b-h5-prefs';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
@@ -39,6 +39,17 @@ $('save').addEventListener('click', () => {
   localStorage.setItem(KEY, JSON.stringify({ email: $('ch-email').checked }));
   toast('偏好已保存（本机）', 'ok');
 });
+(async () => {
+  if (!getToken()) { $('quota').textContent = '登录后可查看额度'; return; }
+  try {
+    const { body } = await bApi('GET', '/v1/subscriptions/quota');
+    $('ch-wechat').checked = body.wechatEnabled;
+    const parts = [`剩余额度：${body.remaining} 条`];
+    if (body.collectedAt) parts.push(`最近续订：${fmtLocal(body.collectedAt)}`);
+    parts.push(body.wechatEnabled ? '微信通道：开' : '微信通道：关（降级邮件+站内）');
+    $('quota').textContent = parts.join(' · ');
+  } catch { $('quota').textContent = '额度读取失败，请刷新重试'; }
+})();
 </script>
 </body>
 </html>
