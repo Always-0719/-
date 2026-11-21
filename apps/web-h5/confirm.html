@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="/h5/style.css">
 </head>
 <body>
+<nav class="nav">
+  <a href="/h5/">建作业</a><a href="/h5/timeline.html">时间线</a><a href="/h5/notifications.html">通知</a><a href="/h5/settings.html">设置</a>
+</nav>
 <h1>确认草稿（全部可手动改）</h1>
 <div class="muted" id="draft-id"></div>
 
@@ -35,6 +38,7 @@
 <div class="card hidden" id="result-card">
   <h2>已落看板</h2>
   <div class="muted" id="result-aid"></div>
+  <p style="margin-top:8px"><a id="timeline-link" href="/h5/timeline.html">里程碑时间线 →</a></p>
   <div class="board" id="board" style="margin-top:8px"></div>
 </div>
 
@@ -213,6 +217,7 @@ $('commit').addEventListener('click', async () => {
     const aid = r.body.assignmentId;
     $('result-card').classList.remove('hidden');
     $('result-aid').textContent = `assignmentId：${aid}（A mock 看板已建任务）`;
+    $('timeline-link').href = `/h5/timeline.html?aid=${encodeURIComponent(aid)}`;
     const board = await aApi('GET', `/v1/assignments/${aid}/board`);
     const names = { todo: '待办', in_progress: '进行中', review: '待审核', done: '已完成' };
     const box = $('board');

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小组作业 · 提醒与订阅设置</title>
+<link rel="stylesheet" href="/h5/style.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/h5/">建作业</a><a href="/h5/timeline.html">时间线</a><a href="/h5/notifications.html">通知</a><a class="active" href="/h5/settings.html">设置</a>
+</nav>
+<h1>提醒与订阅设置</h1>
+
+<div class="card">
+  <h2>通道偏好</h2>
+  <label class="chk"><input type="checkbox" id="ch-inapp" checked disabled> 站内信（必发，不可关）</label>
+  <label class="chk"><input type="checkbox" id="ch-email"> 邮件兜底（有邮箱时发送）</label>
+  <label class="chk"><input type="checkbox" id="ch-wechat" disabled> 微信订阅消息（步骤 16 接真，R3 结论前关闭）</label>
+  <button id="save" style="margin-top:10px">保存偏好</button>
+  <div class="muted">MVP 偏好存本机浏览器；接真后迁服务端。</div>
+</div>
+
+<div class="card">
+  <h2>微信订阅额度</h2>
+  <div class="muted" id="quota">额度：待接真（subscribe_quota 收集端点步骤 16）</div>
+  <p class="yc-body" style="margin-top:8px">一次性订阅消息：每次打开小程序按引导续订攒额度；额度不足自动降级邮件 + 站内，提醒不丢。</p>
+  <button id="renew" class="ghost" disabled>去续订（占位）</button>
+</div>
+
+<script type="module">
+import { toast } from '/h5/lib/api.js';
+const $ = (id) => document.getElementById(id);
+const KEY = 'b-h5-prefs';
+const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+const prefs = read();
+$('ch-email').checked = prefs.email !== false;
+$('save').addEventListener('click', () => {
+  localStorage.setItem(KEY, JSON.stringify({ email: $('ch-email').checked }));
+  toast('偏好已保存（本机）', 'ok');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小组作业 · 里程碑时间线</title>
+<link rel="stylesheet" href="/h5/style.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/h5/">建作业</a><a class="active" href="/h5/timeline.html">时间线</a><a href="/h5/notifications.html">通知</a><a href="/h5/settings.html">设置</a>
+</nav>
+<h1>里程碑时间线</h1>
+
+<div class="card">
+  <div class="row">
+    <input id="aid" placeholder="assignmentId（commit 结果页可直达）" autocomplete="off">
+    <button id="load">加载</button>
+  </div>
+  <div class="muted" id="state">读冻结接口 GET /v1/assignments/{aid}/milestones</div>
+</div>
+
+<div class="card hidden" id="tl-card">
+  <h2 id="tl-title">里程碑</h2>
+  <ol class="tl" id="tl"></ol>
+</div>
+
+<script type="module">
+import { bApi, getToken, el, fmtLocal, toast } from '/h5/lib/api.js';
+const $ = (id) => document.getElementById(id);
+const DAY = 86400000, HOUR = 3600000;
+const params = new URLSearchParams(location.search);
+if (params.get('aid')) $('aid').value = params.get('aid');
+
+function phase(due) {
+  const left = Date.parse(due) - Date.now();
+  if (left <= 0) return ['overdue', '已逾期'];
+  if (left <= 24 * HOUR) return ['h24', '24h 内'];
+  if (left <= 48 * HOUR) return ['h48', '48h 内'];
+  return ['future', '未到期'];
+}
+
+async function load() {
+  const aid = $('aid').value.trim();
+  if (!aid) return toast('填 assignmentId');
+  if (!getToken()) return toast('请先回「建作业」页登录');
+  const r = await bApi('GET', `/v1/assignments/${encodeURIComponent(aid)}/milestones`);
+  const ms = [...r.body.milestones].sort((a, b) => a.sort - b.sort);
+  $('tl-card').classList.remove('hidden');
+  $('tl-title').textContent = `里程碑（${ms.length} 个 · 按 sort）`;
+  $('state').textContent = `assignmentId：${aid}`;
+  const box = $('tl');
+  box.replaceChildren();
+  for (const m of ms) {
+    const [cls, label] = phase(m.due);
+    const li = el('li', { class: `tl-item ${cls}` });
+    li.appendChild(el('span', { class: 'dot' }));
+    const body = el('div', { class: 'tl-body' });
+    body.appendChild(el('div', { class: 'tl-name' }, `${m.sort + 1}. ${m.name}`));
+    body.appendChild(el('div', { class: 'muted' }, `${fmtLocal(m.due)} · ${label}`));
+    li.appendChild(body);
+    box.appendChild(li);
+  }
+}
+$('load').addEventListener('click', () => load().catch(() => {}));
+if (params.get('aid')) load().catch(() => {});
+</script>
+</body>
+</html>

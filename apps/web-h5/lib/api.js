@@ -48,6 +48,11 @@ export const toLocalInput = (iso) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 export const fromLocalInput = (v) => new Date(v).toISOString();
+export const fmtLocal = (iso) => {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 export const defaultDdlInput = () => toLocalInput(new Date(Date.now() + 14 * 86400000).toISOString());
 
 export const el = (tag, attrs = {}, text) => {

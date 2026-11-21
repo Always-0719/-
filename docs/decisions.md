@@ -99,6 +99,15 @@
 - internal 两端点无应用层鉴权（MVP 内网可达，#3）；普通接口仍 401 守卫。
 - 影响接口：POST /v1/internal/schedule/refresh、POST /v1/internal/notify（冻结路径不变，body 形状登记待会签）。
 
+## 20. 2026-11-21 · B 线 · H5 三新页与通知中心（步骤 15）
+- 新增 timeline.html（读冻结 GET milestones，按 sort 渲染；相位色点：future 绿 / 48h 橙 / 24h 深橙 / 逾期红，仅前端按 due 与本地时间计算，不落库）、notifications.html（提醒/评论@/打回/黄牌四类徽章；未读筛选 ?unread=1；标记已读调 B 自主 read 接口）、settings.html（站内必开禁用、邮件开关、微信/额度/续期占位禁用——真实开关待步骤 16 微信+额度落地）。
+- 五页统一顶部 nav（建作业/时间线/通知/设置）；confirm 成功卡增加带 aid 的时间线直达链接。
+- 偏好存 localStorage `b-h5-prefs`（当前仅 {email}），MVP 不建服务端偏好表；接真时再议是否随用户走。
+- 黄牌通知预留两版文案位（本人版/组长版，中性占位），类型 yellow_card_self/yellow_card_leader 徽章已就位，引擎步骤 17。
+- 时间格式化 fmtLocal 统一 'YYYY-MM-DD HH:mm'（lib/api.js），三页共用。
+- 走查：桌面全流程（commit→时间线 4 里程碑→通知 8 条含 notify 注入→已读 8→7→未读筛选→设置持久化）；375px iframe 三页 scrollWidth≤375 无溢出、console 零错误。截图未产出（内置浏览器面板隐藏，NATIVE_BROWSER_VIEWPORT_UNAVAILABLE），以数值走查代替，面板打开后可补。
+- 影响接口：无新增；时间线读冻结 milestones，通知读步骤 13 的 B 自主两接口。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

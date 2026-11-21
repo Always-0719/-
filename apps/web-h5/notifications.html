@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小组作业 · 通知中心</title>
+<link rel="stylesheet" href="/h5/style.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/h5/">建作业</a><a href="/h5/timeline.html">时间线</a><a class="active" href="/h5/notifications.html">通知</a><a href="/h5/settings.html">设置</a>
+</nav>
+<h1>通知中心</h1>
+
+<div class="card">
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="unread-only"> 只看未读</label>
+    <button id="refresh" class="secondary">刷新</button>
+  </div>
+  <div class="muted" id="count"></div>
+</div>
+
+<div id="list"></div>
+
+<div class="card">
+  <h2>黄牌卡片文案预览（F19 引擎生成真卡前的两版文案位）</h2>
+  <div class="yc">
+    <div class="yc-title">本人版</div>
+    <div class="yc-body">提醒：你的任务「X」已逾期。请尽快安排完成，或联系组长调整计划。</div>
+  </div>
+  <div class="yc">
+    <div class="yc-title">组长版（中性提示，不公开点名）</div>
+    <div class="yc-body">中性提示：任务「X」已两次逾期。请关注小组进度并给予必要支持。</div>
+  </div>
+</div>
+
+<script type="module">
+import { bApi, getToken, el, fmtLocal, toast } from '/h5/lib/api.js';
+const $ = (id) => document.getElementById(id);
+const TYPE = {
+  reminder: ['提醒', 'b-rem'], mention: ['评论 @', 'b-men'], reject: ['打回', 'b-rej'],
+  yellow_card_self: ['黄牌·本人', 'b-yc'], yellow_card_leader: ['黄牌·组长', 'b-yc'],
+};
+
+async function load() {
+  if (!getToken()) { toast('请先回「建作业」页登录'); return; }
+  const q = $('unread-only').checked ? '?unread=1' : '';
+  const r = await bApi('GET', `/v1/notifications${q}`);
+  const ns = r.body.notifications;
+  $('count').textContent = `${ns.length} 条${q ? '未读' : ''}`;
+  const box = $('list');
+  box.replaceChildren();
+  if (!ns.length) box.appendChild(el('div', { class: 'card muted' }, '暂无通知'));
+  for (const n of ns) {
+    const card = el('div', { class: `card note ${n.read_at ? 'read' : ''}` });
+    const [label, cls] = TYPE[n.type] || [n.type, 'b-rem'];
+    const head = el('div', { class: 'row' });
+    head.appendChild(el('span', { class: `badge ${cls}` }, label));
+    head.appendChild(el('strong', { class: 'note-title' }, n.title));
+    card.appendChild(head);
+    card.appendChild(el('div', { class: 'note-body' }, n.body));
+    const foot = el('div', { class: 'row' });
+    foot.appendChild(el('span', { class: 'muted' }, fmtLocal(n.created_at)));
+    if (n.read_at) foot.appendChild(el('span', { class: 'muted' }, '已读'));
+    else {
+      const btn = el('button', { class: 'mini' }, '标记已读');
+      btn.addEventListener('click', async () => {
+        await bApi('POST', `/v1/notifications/${encodeURIComponent(n.id)}/read`);
+        toast('已标记已读', 'ok');
+        load().catch(() => {});
+      });
+      foot.appendChild(btn);
+    }
+    card.appendChild(foot);
+    box.appendChild(card);
+  }
+}
+$('refresh').addEventListener('click', () => load().catch(() => {}));
+$('unread-only').addEventListener('change', () => load().catch(() => {}));
+load().catch(() => {});
+</script>
+</body>
+</html>
