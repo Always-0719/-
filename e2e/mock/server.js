@@ -219,6 +219,11 @@ route('POST', '/v1/assignments/:aid/final-submissions', (c) => {
 });
 route('GET', '/v1/assignments/:aid/final-submissions/latest', (c) => db.finals.has(c.params.aid) ? { status: 200, body: db.finals.get(c.params.aid) } : { status: 404, body: { error: 'none' } });
 route('POST', '/v1/internal/assignments/:aid/tasks:fromDraft', (c) => {
+  // mock 保真修复（契约补充 v1.1 待会签）：跨服务部署时 B 随包装层传 groupId，
+  // mock 无共享库，在此登记 assignment→group 映射（真实 A 直读 B-owned assignments 表）
+  if (c.body.groupId && !db.assignments.has(c.params.aid)) {
+    db.assignments.set(c.params.aid, { id: c.params.aid, groupId: c.body.groupId, title: c.body.draft.assignment.title, finalDdl: c.body.draft.assignment.finalDdl, source: 'ai' });
+  }
   createTasksFromDraft(c.params.aid, c.body.draft);
   return { status: 201, body: { created: c.body.draft.tasks.length } };
 }, { internal: true });

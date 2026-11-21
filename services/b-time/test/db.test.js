@@ -18,7 +18,7 @@ test('迁移建齐 8 张 B owned 表，且重复执行幂等', () => {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
   for (const t of EXPECTED_TABLES) assert.ok(tables.includes(t), `缺表 ${t}`);
   const versions = db.prepare('SELECT version FROM _migrations ORDER BY version').all();
-  assert.deepEqual(versions.map(v => v.version), ['001_init', '002_drafts_created_by']);
+  assert.deepEqual(versions.map(v => v.version), ['001_init', '002_drafts_created_by', '003_drafts_source']);
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   db.close();

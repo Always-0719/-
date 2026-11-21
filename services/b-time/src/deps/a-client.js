@@ -12,8 +12,10 @@ export function baseA() {
 export const getGroup = (gid, token) =>
   request('GET', `${baseA()}/v1/groups/${gid}`, { token });
 
-export const tasksFromDraft = (aid, draft) =>
-  request('POST', `${baseA()}/v1/internal/assignments/${aid}/tasks:fromDraft`, { body: { draft } });
+// groupId 随包装层传递（契约补充 v1.1 待会签，decisions #10）：真实部署 A 直读 B-owned assignments 表，
+// mock 无共享库，需要 B 显式告知 assignment→group 映射
+export const tasksFromDraft = (aid, draft, groupId) =>
+  request('POST', `${baseA()}/v1/internal/assignments/${aid}/tasks:fromDraft`, { body: { draft, groupId } });
 
 export function listTasks({ assignmentId, dueBefore, status } = {}) {
   const q = new URLSearchParams();

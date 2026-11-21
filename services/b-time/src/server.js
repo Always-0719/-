@@ -5,6 +5,7 @@ import { openDb, migrate } from './db.js';
 import { parseSession } from './deps/session.js';
 import { registerTemplates } from './routes/templates.js';
 import { registerDrafts } from './routes/drafts.js';
+import { registerAssignments } from './routes/assignments.js';
 
 export function createApp({ db }) {
   const routes = [];
@@ -69,6 +70,7 @@ if (isMain) {
   const { server, route } = createApp({ db });
   registerTemplates({ route, db });
   registerDrafts({ route, db });
+  registerAssignments({ route, db });
   const port = Number(process.env.B_PORT || 8788);
   server.listen(port, () => console.log(`b-time listening on ${port}`));
 }

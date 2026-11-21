@@ -39,7 +39,21 @@
 - 结论：模板任务集为运营 curated 固定拆解（每类 4 任务、含负载/交付规格/依赖/交付清单），任务 due 按总时长比例（dueFraction）生成；memberCount 仅校验 1–8 并记录，不缩放任务数（认领制，与 mock 的 memberCount+1 策略不同，mock 仅作契约替身不约束实现）。
 - 影响接口：POST /v1/assignments/from-template。
 
-## 10. 待登记（后续步骤产生）
-- fromDraft 幂等键缺口（步骤 8 workaround：重试前查 A internal/tasks 判存）。
+## 10. 2026-11-21 · B 线 · fromDraft 幂等缺口与 groupId 包装层补充（步骤 8）
+- 幂等缺口：A fromDraft 契约无幂等键。workaround：aid 由 draftId 确定性派生（`a-${draftId}`），commit 重试复用同一 aid；重试前查 A GET internal/tasks?assignmentId= 判存，已有任务则跳过 fromDraft。正式幂等键提三线会签。
+- groupId 包装层补充（契约补充 v1.1，**待三线会签**）：fromDraft 请求体由 `{draft}` 扩为 `{draft, groupId}`。TaskDraft v1 本体不变；真实部署 A 直读 B-owned assignments 表获得映射，mock 无共享库需 B 显式告知。mock 已按此登记 assignment→group（见 #12）。
+- 影响接口：POST /v1/internal/assignments/{aid}/tasks:fromDraft（仅包装层，端点与 TaskDraft v1 冻结语义不变）。
+
+## 11. 2026-11-21 · B 线 · 最小 ai-draft 提前至步骤 8
+- 背景：计划步骤 8 里程碑要求混合 e2e golden-path 全绿，而 golden-path 依赖 ai-draft（原排步骤 10）。
+- 结论：步骤 8 先落最小 mock provider 版 ai-draft（固定任务集 + 比例 due + 里程碑引擎 + 校验 + 组长权限），路由/校验/落库与完整版一致；步骤 10 仅替换 provider 编排（脱敏/超时/重试/降级/成本上限），接口形状不变。
+- 影响接口：POST /v1/assignments/ai-draft。
+
+## 12. 2026-11-21 · B 线 · e2e mock 保真修复（跨服务部署）
+- 背景：混合模式（真 B + mock A/C）下，mock A 的 assignment→group 映射只由 mock B commit 写入；真 B commit 不经过 mock 内存 → 审核路由 500、事件缺 groupId。
+- 结论：mock fromDraft 按 #10 包装层 groupId 登记映射（e2e/mock/server.js 唯一改动点）。不弱化任何测试断言；纯 mock 与混合两模式 e2e 均回归通过。
+- 影响接口：仅 mock 内部行为，真实契约不变。
+
+## 13. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

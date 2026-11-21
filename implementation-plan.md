@@ -55,6 +55,8 @@ groupwork-mvp/
 
 修改的既有文件只有 `e2e/gate2-extended.test.js`（且只动 B 相关两条，互评/导出两条留给 C）。mock/server.js 不改——staging 双跑时它是 A/C 的替身，改 mock 迁就实现属于指南禁止的"mock 失真"。
 
+> **修订（步骤 8 执行时，2026-11-21）**：上述 mock 不改原则出现一个必要例外——混合模式下 mock A 的 assignment→group 映射只由 mock B commit 写入，真 B commit 不经过 mock 内存，导致审核路由 500、事件缺 groupId。修复方式为 fromDraft 请求体包装层补传 groupId（`{draft, groupId}`，TaskDraft v1 本体不变，契约补充 v1.1 待三线会签），mock 据此登记映射（e2e/mock/server.js 仅此一处改动）。这是补 mock 对真实部署的保真度（真实 A 直读 B-owned assignments 表），不弱化任何断言，纯 mock 与混合两模式 e2e 均回归全绿。详见 decisions.md #10/#12。
+
 ---
 
 ## 2. 数据变更
@@ -165,6 +167,7 @@ groupwork-mvp/
 - 做：POST /v1/drafts/{did}/commit：本地事务建 assignment+milestones → 调 A fromDraft（mock）→ 置 committed；A 失败回滚本地保持 preview；重试前查 A internal/tasks 防重复建任务（fromDraft 无幂等键，缺口登记 decisions.md 待 v1.1 会签）；重复 commit 409。
 - 结束：模板路径"生成→编辑→commit→A mock 看板可见"全通。
 - 验证：`node --test services/b-time/test/commit.test.js`（成功/重复 409/A 失败回滚/防重）；**跑混合 e2e：golden-path + contract-smoke 全绿**（B 真服务替换 mock 的 B 段，里程碑数=4、末≤DDL-1天、TaskDraft 形状、看板四列均由既有测试证明）。
+- 修订（执行时）：golden-path 依赖 ai-draft，故本步同时落**最小 mock provider 版 ai-draft**（路由/校验/落库与完整版一致）；步骤 10 仅替换 provider 编排，接口形状不变（decisions.md #11）。另含上文 mock 保真修复修订。
 
 ### 阶段 2：AI 拆解 + 确认页（第 2–3 周，F6）
 
