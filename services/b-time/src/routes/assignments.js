@@ -1,50 +1,40 @@
 import crypto from 'node:crypto';
 import { validateTaskDraft } from '../core/taskdraft-validator.js';
-import { generateMilestones } from '../core/milestone-engine.js';
+import { createAiOrchestrator } from '../core/ai-orchestrator.js';
+import { providerFromEnv } from '../core/ai-provider.js';
 import { getGroup, tasksFromDraft, listTasks } from '../deps/a-client.js';
-
-const DAY = 86400000;
-
-// 最小 AI mock provider（步骤 10 升级为完整编排：脱敏/超时/重试/降级/成本上限）
-const AI_TASKS = [
-  { title: '资料调研', description: '收集与整理主题资料（AI 拆解建议，可编辑）', deliverableSpec: '资料清单链接', estimatedLoad: 2, dueFraction: 0.35 },
-  { title: '初稿撰写', description: '产出初稿（AI 拆解建议，可编辑）', deliverableSpec: '初稿文档链接', estimatedLoad: 3, dueFraction: 0.55 },
-  { title: '整合校对', description: '整合各部分并校对（AI 拆解建议，可编辑）', deliverableSpec: '整合稿链接', estimatedLoad: 3, dueFraction: 0.75 },
-  { title: '展示准备', description: '展示/提交材料准备（AI 拆解建议，可编辑）', deliverableSpec: '展示材料链接', estimatedLoad: 2, dueFraction: 0.9 },
-];
-
-export function buildAiDraftMock({ requirementsText, memberCount, finalDdl }) {
-  const nowMs = Date.now();
-  const totalDays = (Date.parse(finalDdl) - nowMs) / DAY;
-  const count = Math.max(2, Math.min(4, (memberCount || 4) + 1));
-  const draft = {
-    draftId: `d-${crypto.randomUUID()}`,
-    assignment: { title: 'AI 拆解作业', finalDdl, requirementsText, rubric: null },
-    tasks: AI_TASKS.slice(0, count).map((t, i) => ({
-      key: `t${i + 1}`,
-      title: `任务${i + 1}：${t.title}`,
-      description: t.description,
-      deliverableSpec: t.deliverableSpec,
-      estimatedLoad: t.estimatedLoad,
-      due: new Date(nowMs + totalDays * t.dueFraction * DAY).toISOString(),
-      dependsOn: [],
-    })),
-    milestones: generateMilestones({ finalDdl }),
-  };
-  const check = validateTaskDraft(draft);
-  if (!check.ok) throw new Error(`AI draft 校验失败：${check.errors.join('；')}`);
-  return draft;
-}
 
 async function assertLeader(c, groupId) {
   const g = await getGroup(groupId, c.token);
-  if (g.status === 404) return { status: 404, body: { error: 'group not found' } };
-  if (g.status !== 200) return { status: 502, body: { error: 'A 组详情查询失败' } };
-  if (g.body.ownerId !== c.uid) return { status: 403, body: { error: 'leader only' } };
-  return null;
+  if (g.status === 404) return { denied: { status: 404, body: { error: 'group not found' } } };
+  if (g.status !== 200) return { denied: { status: 502, body: { error: 'A 组详情查询失败' } } };
+  if (g.body.ownerId !== c.uid) return { denied: { status: 403, body: { error: 'leader only' } } };
+  return { group: g.body };
 }
 
-export function registerAssignments({ route }) {
+// mock A 组详情 members 为 uid 数组（无昵称）；真实 A 若返回成员对象则提取昵称供脱敏
+const nicknamesOf = (group) => (group.members || [])
+  .filter((m) => m && typeof m === 'object' && typeof m.nickname === 'string')
+  .map((m) => m.nickname);
+
+export function registerAssignments({ route, db, orchestrator }) {
+  const ai = orchestrator || createAiOrchestrator({
+    db,
+    provider: providerFromEnv(),
+    timeoutMs: Number(process.env.AI_TIMEOUT_MS || 30000),
+    maxCalls: Number(process.env.AI_MAX_CALLS_PER_ASSIGNMENT || 3),
+    tokenBudget: Number(process.env.AI_DAILY_TOKEN_BUDGET || 20000),
+  });
+  const rateBuckets = new Map();
+  const rateLimited = (uid) => {
+    const now = Date.now();
+    const hits = (rateBuckets.get(uid) || []).filter((t) => now - t < 60000);
+    if (hits.length >= 5) return true;
+    hits.push(now);
+    rateBuckets.set(uid, hits);
+    return false;
+  };
+
   route('POST', '/v1/assignments/ai-draft', async (c) => {
     const { requirementsText, memberCount, finalDdl, groupId } = c.body || {};
     if (typeof requirementsText !== 'string') return { status: 400, body: { error: 'requirementsText 必填字符串' } };
@@ -55,14 +45,23 @@ export function registerAssignments({ route }) {
     if (memberCount !== undefined && (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > 8)) {
       return { status: 400, body: { error: 'memberCount 必须为 1–8 整数' } };
     }
-    const denied = await assertLeader(c, groupId);
-    if (denied) return denied;
+    if (rateLimited(c.uid)) return { status: 429, body: { error: 'ai-draft 限频：每分钟最多 5 次' } };
+    const lead = await assertLeader(c, groupId);
+    if (lead.denied) return lead.denied;
 
-    const draft = buildAiDraftMock({ requirementsText, memberCount, finalDdl });
+    const result = await ai.run({
+      groupId, requirementsText, memberCount, finalDdl,
+      nicknames: nicknamesOf(lead.group),
+    });
     const now = new Date().toISOString();
     c.db.prepare(`INSERT INTO drafts (id, group_id, payload, status, created_by, source, created_at, updated_at)
-      VALUES (?, ?, ?, 'preview', ?, 'ai', ?, ?)`).run(draft.draftId, groupId, JSON.stringify(draft), c.uid, now, now);
-    return { status: 201, body: draft };
+      VALUES (?, ?, ?, 'preview', ?, 'ai', ?, ?)`).run(result.draft.draftId, groupId, JSON.stringify(result.draft), c.uid, now, now);
+    console.log(`[ai-draft] group=${groupId} degraded=${result.degraded}${result.degradedReason ? `(${result.degradedReason})` : ''} cached=${!!result.cached} sanitizeHits=${JSON.stringify(result.sanitizeHits)}`);
+    // 降级/缓存标记走响应头：TaskDraft v1 schema 顶层 additionalProperties=false，body 保持纯契约形状
+    const headers = {};
+    if (result.degraded) { headers['x-ai-degraded'] = '1'; headers['x-ai-degraded-reason'] = result.degradedReason; }
+    if (result.cached) headers['x-ai-cached'] = '1';
+    return { status: 201, body: result.draft, headers };
   });
 
   route('POST', '/v1/drafts/:did/commit', async (c) => {
@@ -70,8 +69,8 @@ export function registerAssignments({ route }) {
     if (!row) return { status: 404, body: { error: 'draft not found' } };
     if (row.status !== 'preview') return { status: 409, body: { error: 'not committable' } };
     if (row.created_by !== c.uid) {
-      const denied = await assertLeader(c, row.group_id);
-      if (denied) return denied;
+      const lead = await assertLeader(c, row.group_id);
+      if (lead.denied) return lead.denied;
     }
     const payload = JSON.parse(row.payload);
     const check = validateTaskDraft(payload);

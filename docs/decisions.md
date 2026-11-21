@@ -54,6 +54,15 @@
 - 结论：mock fromDraft 按 #10 包装层 groupId 登记映射（e2e/mock/server.js 唯一改动点）。不弱化任何测试断言；纯 mock 与混合两模式 e2e 均回归通过。
 - 影响接口：仅 mock 内部行为，真实契约不变。
 
-## 13. 待登记（后续步骤产生）
+## 14. 2026-11-21 · B 线 · AI 编排落地细节（步骤 10）
+- 成本记账代理：draft 阶段尚无 assignment，"单作业成本上限"以 **groupId+日** 记账（ai_usage 表，次数 AI_MAX_CALLS_PER_ASSIGNMENT=3 + token 预算 AI_DAILY_TOKEN_BUDGET=20000）；超限不调 provider，直接降级推荐模板。接真后若需按作业记账再议。
+- 降级/缓存标记走**响应头**（x-ai-degraded / x-ai-degraded-reason / x-ai-cached）：TaskDraft v1 schema 顶层 additionalProperties=false，body 保持纯契约形状，冻结 schema 不动。
+- 缓存：sha256(脱敏文本|finalDdl|memberCount) → ai_cache 表，命中重发 draftId；MVP 无 TTL（同 DDL 同要求复用），里程碑压缩边界跨日漂移可接受（commit 前可编辑）。
+- 降级模板选择：关键词匹配 category（code/video/pre/report），兜底 report；降级产物 100% 过校验器、停 preview。
+- 昵称脱敏名单：mock A 组详情 members 仅 uid 无昵称 → 名单入参化，真实 A 返回成员对象时自动提取；mock 阶段等价空名单。
+- 新增 B 内部表 ai_cache / ai_usage（迁移 004，非 PRD 数据模型）；限频 ai-draft 每用户 5 次/分钟（内存滑窗）。
+- 影响接口：POST /v1/assignments/ai-draft（行为增强，形状不变）。
+
+## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

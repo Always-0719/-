@@ -34,7 +34,7 @@ export function createApp({ db }) {
   const server = http.createServer(async (req, res) => {
     const port = server.address()?.port ?? process.env.B_PORT ?? 8788;
     const u = new URL(req.url, `http://127.0.0.1:${port}`);
-    const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+    const send = (status, body, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
     const m = match(req.method, u.pathname);
     if (!m) return send(404, { error: 'no route' });
     let body = null;
@@ -54,7 +54,7 @@ export function createApp({ db }) {
     }
     try {
       const out = await m.r.handler(ctx);
-      send(out.status, out.body);
+      send(out.status, out.body, out.headers);
     } catch (e) {
       send(500, { error: String(e.message) });
     }
