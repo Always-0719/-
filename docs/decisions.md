@@ -71,6 +71,15 @@
 - 渲染一律 textContent（无 innerHTML 插值），脱敏占位符与用户输入均按纯文本展示。
 - 影响接口：无新增冻结端点；GET /h5/*、/dev/a/* 为 B 自有开发面。
 
+## 17. 2026-11-21 · B 线 · 提醒调度 occurrence 模型（步骤 12）
+- occurrence 模型：48h/24h 各物化一个边界时刻（due-48h/due-24h，错过也补）；overdue 每天一期（due+k*24h，只物化 ≤now 的最新一期，防历史积压刷屏）。dedup_key=`kind:id:level:floor(fire_at/24h)` UNIQUE → 重扫/重启天然不重；同级别相邻 occurrence 间隔 ≥24h 实现 F16"24h 内不重复"。
+- fire_at 恒等于理论边界（不随扫描时刻漂移）→ 正常运行触发误差 ≤tick（60s 上限，createScheduler 拒绝 >60s）；停机补扫属恢复路径，误差另计。
+- 扫描对象：B-owned milestones 全扫 + A internal/tasks 过滤 done/review（已交付不催；打回回 in_progress 恢复催）。A 不可用当 tick 只扫里程碑，恢复后自动补任务 job。
+- job.channel 先落 'inapp' 占位；通道扇出（站内必发+邮件兜底+微信按额度）在 dispatch 阶段决定（步骤 13/16），不在生成阶段分裂 job。
+- recompute(aid)（refresh 用，步骤 14 挂端点）：整作业队列 DELETE 后重算；历史留 notifications，reminder_jobs 仅作队列。连续 refresh 结果集合一致。
+- 缺陷记录：首版同步消费 async listTasks（Promise.status undefined → 任务静默漏扫），同步 stub 单测未暴露；修复为 await 且全部 stub 改 async 防回归。live 冒烟（真 B+mock A，+47h 作业）job 集合与独立计算期望 7/7 精确匹配、重启 id 集合不变。
+- 影响接口：无新增冻结端点；B 内部 scheduler + reminder_jobs 行为。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。
