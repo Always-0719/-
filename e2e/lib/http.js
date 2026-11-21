@@ -1,17 +1,27 @@
 import { url } from '../config.js';
 
-export async function req(service, method, path, { body, token } = {}) {
-  const res = await fetch(url(service, path), {
-    method,
-    headers: {
-      'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(10000),
-  });
+const TIMEOUT_MS = 10_000;
+
+export async function req(service, method, path, { token, body } = {}) {
+  const headers = { 'content-type': 'application/json' };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  let res;
+  try {
+    res = await fetch(url(service, path), {
+      method,
+      headers,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error(`${method} ${path} 请求失败：${err.cause?.message || err.message}`);
+  }
+
   const text = await res.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-  return { status: res.status, body: json };
+  let parsed = null;
+  if (text) {
+    try { parsed = JSON.parse(text); } catch { parsed = text; }
+  }
+  return { status: res.status, body: parsed };
 }

@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#4f46e5">
+  <title>协作层 · A 线原型</title>
+  <style>
+:root {
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --primary-soft: #eef2ff;
+  --ink: #1f2937;
+  --ink-2: #4b5563;
+  --ink-3: #9ca3af;
+  --line: #e5e7eb;
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --todo: #6b7280;
+  --doing: #2563eb;
+  --review: #d97706;
+  --done: #059669;
+  --danger: #dc2626;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .06);
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: #eceff6;
+  font-size: 14px;
+  line-height: 1.5;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--primary); }
+
+.phone-shell {
+  position: relative;
+  max-width: 480px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--bg);
+  overflow: hidden;
+  box-shadow: 0 0 40px rgba(31, 41, 55, .08);
+}
+@media (min-width: 520px) {
+  .phone-shell { margin: 18px auto; min-height: calc(100vh - 36px); border-radius: 24px; }
+}
+
+.app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 16px;
+  background: rgba(255,255,255,.94);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.app-bar h1 { font-size: 16px; margin: 0; flex: 1; font-weight: 650; letter-spacing: -.01em; }
+.app-bar .sub { font-size: 11px; color: var(--ink-3); font-weight: 400; }
+.icon-btn {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border: 0; border-radius: 10px; background: var(--bg); color: var(--ink-2); font-size: 17px;
+}
+.icon-btn:active { transform: scale(.94); }
+.screen { padding: 16px; padding-bottom: 88px; }
+.screen.flush { padding-bottom: 24px; }
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+  background: linear-gradient(135deg, #6366f1, #4338ca); color: #fff; font-weight: 800; font-size: 18px;
+  box-shadow: 0 6px 14px rgba(79,70,229,.28);
+}
+.brand-text strong { display: block; font-size: 15px; }
+.brand-text span { font-size: 11px; color: var(--ink-3); }
+
+.hero { padding: 34px 22px 18px; text-align: center; }
+.hero .logo {
+  width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 22px;
+  background: linear-gradient(135deg, #6366f1, #4338ca); color: #fff;
+  display: grid; place-items: center; font-size: 34px; font-weight: 800;
+  box-shadow: 0 14px 30px rgba(79,70,229,.3);
+}
+.hero h1 { font-size: 24px; margin: 0 0 8px; letter-spacing: -.02em; }
+.hero p { color: var(--ink-2); margin: 0 0 28px; font-size: 13px; }
+.hero .feature-row { display: flex; justify-content: center; gap: 18px; margin-top: 26px; color: var(--ink-3); font-size: 11px; }
+.hero .feature-row div { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+.hero .feature-row b { font-size: 19px; color: var(--primary); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 42px; padding: 0 16px; border: 0; border-radius: 12px;
+  background: var(--primary); color: #fff; font-weight: 600; font-size: 14px;
+  transition: transform .1s, background .15s;
+}
+.btn:active { transform: scale(.98); }
+.btn:hover { background: var(--primary-dark); }
+.btn.block { width: 100%; }
+.btn.ghost { background: #fff; color: var(--primary); border: 1px solid #c7d2fe; }
+.btn.ghost:hover { background: var(--primary-soft); }
+.btn.plain { background: var(--bg); color: var(--ink-2); }
+.btn.plain:hover { background: #e5e7eb; }
+.btn.danger { background: #fee2e2; color: var(--danger); }
+.btn.danger:hover { background: #fecaca; }
+.btn.sm { min-height: 32px; padding: 0 11px; font-size: 12px; border-radius: 9px; }
+.btn.xs { min-height: 27px; padding: 0 9px; font-size: 11px; border-radius: 8px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row > .btn { flex: 1; }
+
+.card {
+  background: var(--surface); border-radius: var(--radius); padding: 16px;
+  box-shadow: var(--shadow); border: 1px solid rgba(229,231,235,.7); margin-bottom: 12px;
+}
+.card.tight { padding: 13px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; margin: 20px 2px 10px; }
+.section-title h2 { font-size: 14px; margin: 0; font-weight: 650; }
+.link { color: var(--primary); font-size: 12px; background: none; border: 0; padding: 2px 0; font-weight: 600; }
+.link:active { opacity: .7; }
+.muted { color: var(--ink-3); font-size: 12px; }
+.empty { text-align: center; color: var(--ink-3); padding: 34px 10px; font-size: 13px; }
+.empty .big { font-size: 30px; display: block; margin-bottom: 8px; opacity: .5; }
+
+.group-card { display: flex; align-items: center; gap: 12px; }
+.group-avatar {
+  width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 17px; flex: none;
+}
+.group-card .meta { flex: 1; min-width: 0; }
+.group-card .meta strong { display: block; font-size: 14px; margin-bottom: 3px; }
+.group-card .meta span { color: var(--ink-3); font-size: 11px; }
+
+.avatar {
+  width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center;
+  color: #fff; font-size: 11px; font-weight: 600; flex: none; border: 2px solid #fff;
+}
+.avatar.sm { width: 22px; height: 22px; font-size: 10px; }
+.avatar-stack { display: flex; }
+.avatar-stack .avatar + .avatar { margin-left: -7px; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.stat {
+  background: #fff; border: 1px solid rgba(229,231,235,.8); border-radius: 12px;
+  padding: 11px 8px; text-align: center; box-shadow: var(--shadow);
+}
+.stat b { display: block; font-size: 19px; line-height: 1.2; color: var(--ink); }
+.stat span { font-size: 10px; color: var(--ink-3); }
+
+.tabs { display: flex; gap: 4px; background: #eaeef5; padding: 4px; border-radius: 12px; margin-bottom: 14px; }
+.tabs button {
+  flex: 1; border: 0; background: transparent; padding: 8px 4px; border-radius: 9px;
+  font-size: 12px; color: var(--ink-2); font-weight: 500; white-space: nowrap;
+}
+.tabs button.active { background: #fff; color: var(--primary); font-weight: 650; box-shadow: 0 1px 4px rgba(16,24,40,.08); }
+
+.board {
+  display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;
+  scroll-snap-type: x mandatory; margin: 0 -16px; padding: 0 16px 8px;
+}
+.board::-webkit-scrollbar { height: 5px; }
+.board::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+.board-col {
+  flex: 0 0 252px; scroll-snap-align: start; background: #eff1f6;
+  border-radius: 14px; padding: 10px; min-height: 240px;
+}
+.board-col-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 10px; }
+.board-col-head strong { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.count { background: #fff; color: var(--ink-3); border-radius: 20px; padding: 1px 7px; font-size: 10px; }
+.task-card {
+  background: #fff; border: 1px solid var(--line); border-radius: 11px; padding: 11px;
+  margin-bottom: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.04); cursor: pointer;
+}
+.task-card:active { background: #fafaff; }
+.task-card.unclaimed { border-color: #c7d2fe; background: #fafaff; }
+.task-card .title { font-weight: 600; font-size: 13px; margin-bottom: 7px; line-height: 1.35; }
+.task-card .row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.task-card .due { font-size: 10px; color: var(--ink-3); }
+.task-card .due.overdue { color: var(--danger); font-weight: 600; }
+.tag {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 6px;
+  font-size: 10px; font-weight: 600; background: var(--bg); color: var(--ink-2);
+}
+.tag.rejected { background: #fee2e2; color: var(--danger); }
+.tag.claimed { background: #e0e7ff; color: var(--primary); }
+.tag.version { background: #f3f4f6; color: var(--ink-3); }
+.mini-claim { margin-top: 9px; width: 100%; }
+
+.review-item { border-left: 3px solid var(--review); }
+.review-item .reject-reason { color: var(--danger); font-size: 11px; margin: 6px 0 0; }
+
+.field { margin-bottom: 13px; }
+.field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--ink-2); }
+.field input, .field textarea, .field select {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  background: #fff; outline: none; font-size: 14px;
+}
+.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.field textarea { min-height: 80px; resize: vertical; }
+.field .hint { font-size: 10px; color: var(--ink-3); margin-top: 5px; }
+.inline-fields { display: flex; gap: 10px; }
+.inline-fields .field { flex: 1; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 60; background: rgba(17,24,39,.42);
+  display: flex; justify-content: center; align-items: flex-end;
+  animation: fade .16s ease-out;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.sheet, .dialog {
+  background: #fff; width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+  border-radius: 20px 20px 0 0; padding: 18px 18px 26px;
+  animation: slideUp .2s ease-out;
+}
+.dialog { align-self: center; border-radius: 18px; max-width: 400px; margin: 16px; padding-bottom: 18px; }
+@keyframes slideUp { from { transform: translateY(26px); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
+.sheet-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+.sheet-head h2 { margin: 0; font-size: 17px; }
+.sheet-head .sub { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+.close-x { border: 0; background: var(--bg); width: 28px; height: 28px; border-radius: 50%; color: var(--ink-2); font-size: 15px; }
+
+.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+.detail-desc { font-size: 12px; color: var(--ink-2); background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+.divider { height: 1px; background: var(--line); margin: 16px 0; }
+.block-title { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 650; margin: 0 0 10px; }
+
+.deliverable {
+  display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--line);
+  border-radius: 10px; margin-bottom: 7px; font-size: 12px;
+}
+.deliverable .favicon {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--primary-soft); color: var(--primary); font-size: 12px; font-weight: 700; flex: none;
+}
+.deliverable .info { flex: 1; min-width: 0; }
+.deliverable .info strong { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deliverable .info span { font-size: 10px; color: var(--ink-3); }
+.deliverable old { text-decoration: line-through; opacity: .5; }
+
+.comment { display: flex; gap: 8px; margin-bottom: 12px; }
+.comment .body { flex: 1; background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+.comment .body .head { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--ink-3); margin-bottom: 3px; }
+.comment .body .head b { color: var(--ink); font-size: 12px; }
+.comment .body p { margin: 0; font-size: 12px; word-break: break-word; }
+.comment .mention { color: var(--primary); font-weight: 600; }
+.comment-edit { width: 100%; border: 1px solid var(--primary); border-radius: 8px; padding: 7px; font-size: 12px; }
+.mention-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
+.mention-bar button { border: 1px solid var(--line); background: #fff; border-radius: 20px; padding: 3px 9px; font-size: 11px; color: var(--ink-2); }
+.mention-bar button:active { background: var(--primary-soft); color: var(--primary); }
+
+.action-bar {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px; z-index: 25; display: flex; gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(255,255,255,.94); backdrop-filter: blur(10px); border-top: 1px solid var(--line);
+}
+.action-bar .btn { flex: 1; min-height: 40px; }
+
+.event-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f1f2f5; }
+.event-item:last-child { border-bottom: 0; }
+.event-item .ev-icon {
+  width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--primary-soft); color: var(--primary); font-size: 13px; flex: none;
+}
+.event-item .ev-body { flex: 1; min-width: 0; }
+.event-item .ev-body b { font-size: 12px; }
+.event-item .ev-body div { font-size: 11px; color: var(--ink-3); word-break: break-all; }
+.event-item time { font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+
+.snapshot-banner {
+  background: linear-gradient(135deg, #ecfdf5, #f0fdf4); border: 1px solid #a7f3d0;
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;
+}
+.snapshot-banner strong { color: #047857; font-size: 13px; }
+.snapshot-banner p { margin: 4px 0 0; font-size: 11px; color: #047857; opacity: .85; }
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; font-size: 12px; border-bottom: 1px solid #f1f2f5; }
+.kv:last-child { border-bottom: 0; }
+.kv span:first-child { color: var(--ink-3); flex: none; }
+.kv span:last-child { text-align: right; word-break: break-all; }
+.verify-ok { color: var(--done); font-weight: 600; }
+
+.toast-root { position: fixed; bottom: 86px; left: 0; right: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.toast {
+  background: rgba(31,41,55,.94); color: #fff; padding: 9px 15px; border-radius: 20px;
+  font-size: 12px; box-shadow: 0 8px 20px rgba(0,0,0,.16); animation: toastIn .18s ease-out;
+  max-width: 86%; text-align: center;
+}
+.toast.error { background: #b91c1c; }
+.toast.success { background: #047857; }
+@keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { background: var(--primary-soft); color: var(--primary); border-radius: 20px; padding: 3px 9px; font-size: 11px; }
+.code-box {
+  display: flex; align-items: center; justify-content: space-between; background: var(--primary-soft);
+  border: 1px dashed #a5b4fc; border-radius: 12px; padding: 12px 14px; margin: 10px 0;
+}
+.code-box b { font-size: 22px; letter-spacing: .18em; color: var(--primary); }
+.pending-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.pending-row:last-child { border-bottom: 0; }
+.pending-row .who { flex: 1; font-size: 12px; }
+.user-switch { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 8px; }
+.user-switch button {
+  flex: none; border: 1px solid var(--line); background: #fff; border-radius: 20px;
+  padding: 5px 10px 5px 5px; display: flex; align-items: center; gap: 6px; font-size: 11px;
+}
+.user-switch button.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 10px; }
+
+</style>
+</head>
+<body>
+  <div class="phone-shell">
+    <div id="app"></div>
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+    <div id="modal-root"></div>
+  </div>
+  <script>
+/* 协作层 · A 线最小可用原型
+ * 覆盖 F1 / F2 / F9 / F12 / F13 / F21 / F22
+ * 数据层：读写全部走 mock API，前端只留一份内存缓存，不再落 localStorage 业务数据；
+ * 跨标签页同步由轮询承担（原型没有 WebSocket 通道）。
+ */
+(() => {
+  'use strict';
+
+  const API = new URLSearchParams(location.search).get('api') || 'http://127.0.0.1:8787';
+  const SESSION_KEY = 'hackathon_a_session';
+  const $ = (sel) => document.querySelector(sel);
+  const STATUS = {
+    unclaimed: '未认领', todo: '待办', doing: '进行中', review: '待审核', done: '已完成'
+  };
+  const STATUS_COLOR = { unclaimed: '#8b5cf6', todo: '#6b7280', doing: '#2563eb', review: '#d97706', done: '#059669' };
+  // 冻结 Event schema v1 的 18 类。真源 = packages/contracts/event.v1.schema.json；
+  // 本文件以 file:// 自包含打开，不能跨源 import JSON，故保留标签副本，
+  // 由 e2e/contracts.test.js 断言键集合与真源 enum 逐字一致。
+  // 原型旧标签 task_claim / review_approve / group_create / invite_create 等不在冻结表内，已弃用。
+  const TYPE_LABEL = {
+    member_join: '成员加入', member_exit: '成员退出', claim: '认领任务', reassign: '转派任务',
+    start: '开始任务', submit: '提交审核', reject: '审核打回', approve: '审核通过',
+    comment: '新增评论', deliverable_update: '提交交付物', ddl_change: 'DDL 变更',
+    final_submit: '统一提交', review_submit: '提交互评', yellow_card: '黄牌提醒',
+    dispute_open: '发起申诉', dispute_resolve: '申诉裁定', contribution_adjust: '贡献调整',
+    report_export: '报告导出'
+  };
+  const EV_ICON = { approve: '✓', reject: '✓', review_submit: '✓', comment: '◌', deliverable_update: '↗' };
+
+  function emptyState() {
+    return {
+      users: [], groups: [], members: [], invites: [], assignments: [], tasks: [],
+      deliverables: [], comments: [], events: [], pendingJoins: [], finalSubmissions: [], session: null
+    };
+  }
+
+  let state = emptyState();
+  let token = null;
+  const ui = { view: 'login', groupId: null, tab: 'board', taskId: null };
+  let modal = null;
+  let emailCooldownUntil = 0;
+  let apiError = '';
+  let busy = false;
+
+  /* ---------------- API 数据层 ---------------- */
+  async function api(method, path, body) {
+    const res = await fetch(API + path, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* 空响应体 */ }
+    if (!res.ok) {
+      const err = new Error((data && data.error) || ('HTTP ' + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function saveSession() {
+    try {
+      if (token && state.session) localStorage.setItem(SESSION_KEY, JSON.stringify({ token, userId: state.session }));
+      else localStorage.removeItem(SESSION_KEY);
+    } catch (_) { /* 隐私模式下 localStorage 不可用，退化为仅内存会话 */ }
+  }
+
+  async function login(code) {
+    const r = await api('POST', '/v1/auth/wechat-login', { code });
+    token = r.token;
+    state.session = r.userId;
+    saveSession();
+  }
+
+  function dropSession() {
+    token = null;
+    state = emptyState();
+    saveSession();
+  }
+
+  // mock 的 todo 含「未认领 / 待办」两态，in_progress 即原型的 doing；只在视图侧还原，不改服务端词表。
+  const toViewStatus = (t) => (t.status === 'todo' && !t.assigneeId ? 'unclaimed' : t.status === 'in_progress' ? 'doing' : t.status);
+
+  function taskFromFull(raw, groupId, assignmentId) {
+    const prev = state.tasks.find((t) => t.id === raw.id);
+    const version = raw.deliverables.length ? Math.max(...raw.deliverables.map((d) => d.version)) : 0;
+    return {
+      id: raw.id, groupId, assignmentId, key: raw.key, title: raw.title,
+      status: toViewStatus(raw), assigneeId: raw.assigneeId, due: raw.due,
+      estimatedLoad: raw.estimatedLoad, version,
+      // 服务端的 rejected 是「曾被打回」的留痕，通过后不清；视图上已完成的卡片不该再挂打回标。
+      rejected: !!raw.rejected && raw.status !== 'done',
+      description: prev ? prev.description : '',
+      deliverableSpec: prev ? prev.deliverableSpec : '',
+      dependsOn: prev ? prev.dependsOn : [],
+      rejectReason: raw.status === 'done' ? null : (prev ? prev.rejectReason : null)
+    };
+  }
+
+  function eventFromLedger(e, groupId) {
+    const ref = e.objectRef || {};
+    const tid = ref.kind === 'task' ? ref.id : ((e.payload && e.payload.taskId) || null);
+    return {
+      id: e.eventId, type: e.type, actorId: e.actorId, groupId: e.groupId || groupId,
+      taskId: tid, ts: Date.parse(e.occurredAt), payload: e.payload || {}
+    };
+  }
+
+  function finalFromApi(s) {
+    return {
+      id: s.id, groupId: s.groupId, assignmentId: s.assignmentId,
+      submittedBy: s.submittedBy, createdAt: Date.parse(s.submittedAt),
+      reason: s.reason || null, forced: !!s.forced,
+      snapshot: {
+        tasks: (s.tasks || []).map((t) => ({
+          id: t.id, title: t.title, status: toViewStatus(t),
+          assignee: t.assigneeId || null, deliverable: t.latestDeliverable || null
+        }))
+      }
+    };
+  }
+
+  const commentFromApi = (c) => ({ ...c, createdAt: Date.parse(c.createdAt), editedAt: c.editedAt ? Date.parse(c.editedAt) : null });
+
+  // 一次刷新拉齐当前身份可见的全部数据；ui / modal 不受影响。
+  async function refresh() {
+    const dir = await api('GET', '/v1/users');
+    state.users = dir.users;
+    if (!state.session) return;
+
+    const mine = await api('GET', '/v1/groups');
+    const groups = [], members = [], invites = [], assignments = [];
+    const tasks = [], deliverables = [], events = [], finals = [], pending = [];
+    const seenEvents = new Set();
+
+    for (const g of mine.groups) {
+      const detail = await api('GET', '/v1/groups/' + g.id);
+      groups.push({
+        id: g.id, name: detail.name, course: detail.course ?? null,
+        color: detail.color || g.color || '#6366f1', ownerId: detail.ownerId,
+        memberLimit: detail.memberLimit ?? 8, joinNeedConfirm: !!detail.joinNeedConfirm
+      });
+      for (const id of detail.members) {
+        members.push({ groupId: g.id, userId: id, role: id === detail.ownerId ? 'leader' : 'member', joinedAt: 0 });
+      }
+      const inv = await api('GET', `/v1/groups/${g.id}/invites`);
+      for (const i of inv.invites) {
+        invites.push({ code: i.code, groupId: g.id, expiresAt: Date.parse(i.expiresAt), createdBy: i.createdBy, active: !!i.active });
+      }
+      if (detail.ownerId === state.session) {
+        const jr = await api('GET', `/v1/groups/${g.id}/join-requests`);
+        for (const p of jr.requests) {
+          pending.push({ groupId: g.id, userId: p.userId, code: p.code, ts: p.ts ? Date.parse(p.ts) : null });
+        }
+      }
+      const asg = await api('GET', `/v1/groups/${g.id}/assignments`);
+      for (const a of asg.assignments) {
+        assignments.push({
+          id: a.id, groupId: g.id, title: a.title, finalDdl: a.finalDdl,
+          course: detail.course ?? null, requirements: '', rubric: null
+        });
+        const full = await api('GET', `/v1/internal/assignments/${a.id}/tasks-full`);
+        for (const raw of full.tasks) {
+          tasks.push(taskFromFull(raw, g.id, a.id));
+          for (const d of raw.deliverables) deliverables.push({ ...d, createdAt: Date.parse(d.createdAt) });
+        }
+        const tl = await api('GET', `/v1/assignments/${a.id}/timeline`);
+        for (const e of tl.events) {
+          if (seenEvents.has(e.eventId)) continue;
+          seenEvents.add(e.eventId);
+          events.push(eventFromLedger(e, g.id));
+        }
+        const fs = await api('GET', `/v1/assignments/${a.id}/final-submissions`);
+        for (const s of fs.submissions) finals.push(finalFromApi(s));
+      }
+    }
+
+    const myReq = await api('GET', '/v1/join-requests/mine');
+    for (const p of myReq.requests) {
+      pending.push({ groupId: p.groupId, groupName: p.groupName, userId: p.userId, code: p.code, ts: p.ts ? Date.parse(p.ts) : null });
+    }
+
+    state.groups = groups;
+    state.members = members;
+    state.invites = invites;
+    state.assignments = assignments;
+    state.tasks = tasks;
+    state.deliverables = deliverables;
+    state.events = events;
+    state.pendingJoins = pending;
+    // 提交历史按时间倒序：renderSubmit 用 find 取「最新一条」。
+    state.finalSubmissions = finals.sort((a, b) => b.createdAt - a.createdAt);
+
+    // 评论按任务懒加载，刷新时只重取当前打开的那条任务，避免 N+1。
+    if (modal && modal.type === 'task') await loadTaskDetail(modal.id, true);
+    else state.comments = state.comments.filter((c) => tasks.some((t) => t.id === c.taskId));
+  }
+
+  async function loadTaskDetail(tid, commentsOnly = false) {
+    if (!commentsOnly) {
+      const d = await api('GET', '/v1/tasks/' + tid);
+      const t = state.tasks.find((x) => x.id === tid);
+      if (t) {
+        t.description = d.description || '';
+        t.deliverableSpec = d.deliverableSpec || '';
+        t.dependsOn = d.dependsOn || [];
+        t.rejectReason = d.status === 'done' ? null : (d.rejectReason || null);
+        t.rejected = !!d.rejected && d.status !== 'done';
+      }
+      const dl = await api('GET', `/v1/tasks/${tid}/deliverables`);
+      state.deliverables = state.deliverables.filter((x) => x.taskId !== tid)
+        .concat(dl.deliverables.map((x) => ({ ...x, createdAt: Date.parse(x.createdAt) })));
+    }
+    const cm = await api('GET', `/v1/tasks/${tid}/comments`);
+    state.comments = state.comments.filter((c) => c.taskId !== tid).concat(cm.comments.map(commentFromApi));
+  }
+
+  /* ---------------- 工具 ---------------- */
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const user = (id) => state.users.find((u) => u.id === id) || { id, name: '未知用户', color: '#9ca3af' };
+  const group = (id) => state.groups.find((g) => g.id === id) || null;
+  const task = (id) => state.tasks.find((t) => t.id === id) || null;
+  const isLeader = (gid) => !!group(gid) && group(gid).ownerId === state.session;
+  const memberIds = (gid) => state.members.filter((m) => m.groupId === gid).map((m) => m.userId);
+  const taskDeliverables = (tid) => state.deliverables.filter((d) => d.taskId === tid).sort((a, b) => b.version - a.version);
+  const latestDeliverable = (tid) => taskDeliverables(tid)[0] || null;
+  const fmt = (v) => {
+    if (!v) return '—';
+    const d = new Date(v);
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const isValidUrl = (v) => /^https?:\/\/[^\s]+$/i.test(String(v).trim());
+  function urlType(url) {
+    if (/docs\.qq\.com/i.test(url)) return '腾讯文档';
+    if (/feishu\.cn/i.test(url)) return '飞书文档';
+    if (/google\.com|docs\.google/i.test(url)) return 'Google Docs';
+    if (/github\.com/i.test(url)) return 'GitHub';
+    if (/wjx\.cn/i.test(url)) return '问卷星';
+    if (/pan\.|drive|onedrive/i.test(url)) return '网盘';
+    return '其他链接';
+  }
+  function toast(msg, kind = '') {
+    const root = $('#toast-root');
+    const el = document.createElement('div');
+    el.className = 'toast ' + kind;
+    el.textContent = msg;
+    root.appendChild(el);
+    while (root.children.length > 2) root.firstElementChild.remove();
+    setTimeout(() => el.remove(), 2200);
+  }
+  /* ---------------- 渲染主入口 ---------------- */
+  function render() {
+    const app = $('#app');
+    if (!state.session) {
+      app.innerHTML = renderLogin();
+    } else if (ui.view === 'groups') {
+      app.innerHTML = renderGroups();
+    } else if (ui.view === 'group') {
+      app.innerHTML = renderGroup();
+    } else {
+      app.innerHTML = renderGroups();
+      ui.view = 'groups';
+    }
+    renderModal();
+  }
+
+  function appBar(title, right = '', back = false) {
+    return `<div class="app-bar">
+      ${back ? `<button class="icon-btn" data-act="back-groups" aria-label="返回">‹</button>` : `<div class="brand"><div class="brand-mark">协</div></div>`}
+      <h1>${esc(title)}${back ? '<div class="sub">A 线 · 组队与协作</div>' : ''}</h1>
+      ${right}
+    </div>`;
+  }
+
+  /* ---------------- F1 登录 ---------------- */
+  function renderLogin() {
+    return `${appBar('协作层')}
+    <div class="screen flush">
+      <div class="hero">
+        <div class="logo">协</div>
+        <h1>小组作业协作层</h1>
+        <p>建组 · 认领 · 审核 · 统一提交<br>5 分钟建起来，全过程留痕</p>
+        <button class="btn block" data-act="wx-login">微信一键登录</button>
+        <div style="height:10px"></div>
+        <button class="btn ghost block" data-act="email-login-open">邮箱验证码登录（H5 兜底）</button>
+        <div class="feature-row">
+          <div><b>7</b>P0 功能</div><div><b>3</b>步入组</div><div><b>2.5s</b>轮询同步</div>
+        </div>
+      </div>
+      <div class="card tight" style="margin-top:24px">
+        <div class="block-title"><span>演示身份</span><span class="muted">点击直接切换</span></div>
+        ${state.users.length ? userSwitch() : '<p class="muted">演示身份目录加载中…</p>'}
+        <p class="muted" style="margin:4px 0 0">演示身份由 mock API 签发会话。真实环境由微信授权 / 邮箱验证码签发 7 天 JWT。</p>
+        ${apiError ? `<p class="muted" style="margin:6px 0 0;color:var(--danger)">连不上 mock API（${esc(API)}）：${esc(apiError)}<br>请先启动 e2e/mock/server.js，再刷新本页。</p>` : ''}
+      </div>
+      <button class="btn plain block sm" data-act="reset-demo">重置演示数据</button>
+    </div>`;
+  }
+  function userSwitch() {
+    return `<div class="user-switch">${state.users.map((u) => `
+      <button data-act="switch-user" data-id="${u.id}" class="${state.session === u.id ? 'active' : ''}">
+        <span class="avatar sm" style="background:${u.color}">${esc(u.name[0])}</span>${esc(u.name)}
+      </button>`).join('')}</div>`;
+  }
+
+  /* ---------------- F2 建组与邀请 ---------------- */
+  function renderGroups() {
+    const myGroups = state.groups.filter((g) => memberIds(g.id).includes(state.session));
+    const pending = state.pendingJoins.filter((p) => p.userId === state.session);
+    return `${appBar('我的小组', `<button class="icon-btn" data-act="switch-user-open" title="切换身份">⇄</button>`)}
+    <div class="screen">
+      <div class="card tight">
+        <div class="block-title"><span>当前身份</span><span class="muted">可切换体验不同角色</span></div>
+        ${userSwitch()}
+      </div>
+      ${pending.length ? `<div class="card tight" style="border-color:#c7d2fe">
+        <div class="block-title"><span>待组长确认的入组申请</span></div>
+        ${pending.map((p) => `<div class="pending-row"><span class="who">申请加入「${esc(p.groupName || group(p.groupId)?.name || p.groupId)}」</span><span class="muted">${fmt(p.ts)}</span></div>`).join('')}
+        <p class="muted" style="margin-bottom:0">切换到组长身份后在「成员」页处理。</p>
+      </div>` : ''}
+      <div class="section-title"><h2>我的小组（${myGroups.length}）</h2><span class="muted">数据来自 mock API</span></div>
+      ${myGroups.length ? myGroups.map((g) => {
+        const ids = memberIds(g.id);
+        const taskCount = state.tasks.filter((t) => t.groupId === g.id).length;
+        return `<div class="card group-card" data-act="open-group" data-id="${g.id}">
+          <div class="group-avatar" style="background:${g.color || '#6366f1'}">${esc(g.name[0])}</div>
+          <div class="meta"><strong>${esc(g.name)}</strong><span>${esc(g.course || '未关联课程')} · ${ids.length}/${g.memberLimit} 人 · ${taskCount} 个任务</span></div>
+          <div class="avatar-stack">${ids.slice(0, 4).map((id) => `<span class="avatar sm" style="background:${user(id).color}">${esc(user(id).name[0])}</span>`).join('')}</div>
+          <span style="color:var(--ink-3)">›</span>
+        </div>`;
+      }).join('') : `<div class="empty"><span class="big">◌</span>你还没有加入小组<br>创建一个，或用邀请码加入</div>`}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn" data-act="create-group-open">＋ 建组</button>
+        <button class="btn ghost" data-act="join-open">邀请码加入</button>
+      </div>
+      <div class="card tight" style="margin-top:16px;background:#fff">
+        <div class="block-title"><span>A 线范围</span></div>
+        <div class="chip-row">
+          <span class="chip">F1 登录</span><span class="chip">F2 建组邀请</span><span class="chip">F9 看板认领</span>
+          <span class="chip">F12 交付物</span><span class="chip">F13 评论</span><span class="chip">F21 审核</span><span class="chip">F22 统一提交</span>
+        </div>
+      </div>
+    </div>
+    <div class="action-bar"><button class="btn plain" data-act="email-login-open">邮箱登录</button><button class="btn" data-act="wx-login">微信一键登录</button></div>`;
+  }
+
+  /* ---------------- 小组页 ---------------- */
+  function renderGroup() {
+    const g = group(ui.groupId);
+    if (!g || !memberIds(g.id).includes(state.session)) { ui.view = 'groups'; return renderGroups(); }
+    const ids = memberIds(g.id);
+    const tasks = state.tasks.filter((t) => t.groupId === g.id);
+    const done = tasks.filter((t) => t.status === 'done').length;
+    const tabs = [['board', '看板'], ['review', '审核'], ['submit', '提交'], ['events', '账本'], ['members', '成员']];
+    return `${appBar(g.name, `<button class="icon-btn" data-act="invite-open" title="邀请">＋</button>`, true)}
+    <div class="screen">
+      <div class="card tight">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div><div style="font-weight:600">${esc(g.course || '未关联课程')}</div>
+          <div class="muted">组长：${esc(user(g.ownerId).name)} · ${ids.length}/${g.memberLimit} 人 · ${isLeader(g.id) ? '你是组长' : '你是成员'}</div></div>
+          <div class="avatar-stack">${ids.slice(0, 5).map((id) => `<span class="avatar" style="background:${user(id).color}">${esc(user(id).name[0])}</span>`).join('')}</div>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><b>${tasks.length}</b><span>全部任务</span></div>
+        <div class="stat"><b>${tasks.filter((t) => t.status === 'doing').length}</b><span>进行中</span></div>
+        <div class="stat"><b>${done}/${tasks.length}</b><span>已完成</span></div>
+      </div>
+      <div class="tabs">${tabs.map(([k, label]) => `<button class="${ui.tab === k ? 'active' : ''}" data-act="tab" data-tab="${k}">${label}</button>`).join('')}</div>
+      ${ui.tab === 'board' ? renderBoard(tasks) : ''}
+      ${ui.tab === 'review' ? renderReview(tasks) : ''}
+      ${ui.tab === 'submit' ? renderSubmit(g, tasks) : ''}
+      ${ui.tab === 'events' ? renderEvents(g.id) : ''}
+      ${ui.tab === 'members' ? renderMembers(g, ids) : ''}
+    </div>`;
+  }
+
+  /* ---------------- F9 看板 ---------------- */
+  function renderBoard(tasks) {
+    const cols = [
+      ['todo', '待办'], ['doing', '进行中'], ['review', '待审核'], ['done', '已完成']
+    ];
+    return `<div class="board">${cols.map(([key, label]) => {
+      const list = tasks.filter((t) => (key === 'todo' ? (t.status === 'unclaimed' || t.status === 'todo') : t.status === key));
+      list.sort((a, b) => (a.status === 'unclaimed' ? -1 : 0) - (b.status === 'unclaimed' ? -1 : 0));
+      return `<div class="board-col">
+        <div class="board-col-head"><strong><span class="dot" style="background:${STATUS_COLOR[key]}"></span>${label}</strong><span class="count">${list.length}</span></div>
+        ${list.length ? list.map(renderTaskCard).join('') : `<div class="muted" style="text-align:center;padding:26px 6px;font-size:11px">暂无任务</div>`}
+      </div>`;
+    }).join('')}</div>
+    <p class="muted" style="margin:12px 2px 0">横向滑动查看四列 · 点击卡片查看详情与评论</p>`;
+  }
+  function renderTaskCard(t) {
+    const unclaimed = t.status === 'unclaimed';
+    const overdue = t.status !== 'done' && Date.parse(t.due) < Date.now();
+    const dl = latestDeliverable(t.id);
+    return `<div class="task-card ${unclaimed ? 'unclaimed' : ''}" data-act="open-task" data-id="${t.id}">
+      <div class="title">${esc(t.title)}</div>
+      <div class="row">
+        ${t.assigneeId ? `<span class="avatar sm" style="background:${user(t.assigneeId).color}">${esc(user(t.assigneeId).name[0])}</span>` : `<span class="tag claimed">未认领</span>`}
+        <span class="due ${overdue ? 'overdue' : ''}">${overdue ? '逾期 · ' : ''}${fmt(t.due)}</span>
+      </div>
+      <div class="row" style="margin-top:7px">
+        <span class="tag version">负载 ${t.estimatedLoad}</span>
+        ${t.rejected ? `<span class="tag rejected">已打回</span>` : ''}
+        ${dl ? `<span class="tag">v${dl.version}</span>` : ''}
+      </div>
+      ${unclaimed ? `<button class="btn sm mini-claim" data-act="claim" data-id="${t.id}">一键认领</button>` : ''}
+    </div>`;
+  }
+
+  /* ---------------- F21 审核队列 ---------------- */
+  function renderReview(tasks) {
+    const list = tasks.filter((t) => t.status === 'review');
+    return `<div class="section-title"><h2>待我审核（${list.length}）</h2><span class="muted">默认审核人：组长</span></div>
+    ${list.length ? list.map((t) => {
+      const dl = latestDeliverable(t.id);
+      return `<div class="card tight review-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <strong style="font-size:13px">${esc(t.title)}</strong><span class="tag">v${dl ? dl.version : 0}</span>
+        </div>
+        <div class="muted" style="margin:6px 0">提交人：${esc(user(t.assigneeId).name)} · ${fmt(dl ? dl.createdAt : t.due)}</div>
+        ${dl ? `<a class="deliverable" href="${esc(dl.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">
+          <span class="favicon">${esc(dl.type[0])}</span><span class="info"><strong>${esc(dl.title)}</strong><span>${esc(dl.type)} · 点击查看</span></span><span>↗</span>
+        </a>` : ''}
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn ghost sm" data-act="reject-open" data-id="${t.id}">打回</button>
+          <button class="btn sm" data-act="approve" data-id="${t.id}" ${!isLeader(t.groupId) ? 'disabled' : ''}>通过</button>
+        </div>
+        ${!isLeader(t.groupId) ? `<p class="muted" style="margin:7px 0 0">仅组长可审核，可切换林晓体验</p>` : ''}
+      </div>`;
+    }).join('') : `<div class="empty"><span class="big">✓</span>暂无待审核任务</div>`}`;
+  }
+
+  /* ---------------- F22 统一提交 ---------------- */
+  function currentAssignment(gid) {
+    const t = state.tasks.find((x) => x.groupId === gid);
+    return state.assignments.find((a) => a.id === (t ? t.assignmentId : null))
+      || state.assignments.find((a) => a.groupId === gid) || null;
+  }
+  function renderSubmit(g, tasks) {
+    const a = currentAssignment(g.id);
+    if (!a) return `<div class="section-title"><h2>作业统一提交</h2><span class="muted">不可变快照</span></div>
+      <div class="empty"><span class="big">▤</span>该小组还没有作业<br>作业由 B 线模板 / AI 拆解生成后，这里才会出现提交入口</div>`;
+    const unfinished = tasks.filter((t) => t.status !== 'done');
+    const latest = state.finalSubmissions.find((s) => s.groupId === g.id && s.assignmentId === a.id);
+    return `<div class="section-title"><h2>作业统一提交</h2><span class="muted">不可变快照</span></div>
+    <div class="card">
+      <div style="font-weight:650;font-size:14px">${esc(a.title)}</div>
+      <div class="muted" style="margin:4px 0 12px">最终 DDL：${fmt(a.finalDdl)}</div>
+      <div class="kv"><span>任务完成度</span><span class="${unfinished.length ? '' : 'verify-ok'}">${tasks.length - unfinished.length} / ${tasks.length}</span></div>
+      <div class="kv"><span>待完成</span><span>${unfinished.length ? unfinished.map((t) => esc(t.title)).join('、') : '无'}</span></div>
+      <div class="kv"><span>已提交次数</span><span>${state.finalSubmissions.filter((s) => s.groupId === g.id).length}</span></div>
+      <p class="muted" style="margin:12px 0 0">${unfinished.length
+        ? (isLeader(g.id) ? '任务未全部完成，组长强制提交须填写理由，并写入事件账本。' : '还有任务未完成，仅组长可强制提交。')
+        : '全部任务已完成，可生成不可变提交快照。'}</p>
+      ${!latest ? `<button class="btn block" style="margin-top:14px" data-act="final-submit-open" data-force="${unfinished.length ? 1 : 0}" ${!isLeader(g.id) && unfinished.length ? 'disabled' : ''}>生成统一提交快照</button>`
+        : `<button class="btn ghost block sm" style="margin-top:14px" data-act="final-submit-open" data-force="${unfinished.length ? 1 : 0}">再次提交（保留历史快照）</button>`}
+    </div>
+    ${latest ? renderSnapshot(latest, tasks) : `<div class="empty"><span class="big">▤</span>尚未提交<br>快照生成后任何修改都不会影响快照内容</div>`}`;
+  }
+  function renderSnapshot(s, tasks) {
+    const snapTasks = s.snapshot.tasks || [];
+    const same = JSON.stringify(snapTasks.map((t) => [t.id, t.status])) === JSON.stringify(tasks.map((t) => [t.id, t.status]));
+    return `<div class="snapshot-banner">
+      <strong>✓ 已生成不可变快照 · ${fmt(s.createdAt)}</strong>
+      <p>提交人：${esc(user(s.submittedBy).name)}${s.reason ? ' · 强制提交理由：' + esc(s.reason) : ''}</p>
+    </div>
+    <div class="card">
+      <div class="block-title"><span>快照内容</span><span class="tag version">${snapTasks.length} 个任务</span></div>
+      ${snapTasks.map((t) => `<div class="kv"><span>${esc(t.title)}</span><span>${STATUS[t.status]}${t.deliverable ? ' · ' + esc(t.deliverable.title) + ' v' + t.deliverable.version : ''}</span></div>`).join('')}
+      <div class="divider"></div>
+      <button class="btn plain sm block" data-act="verify-snapshot" data-id="${s.id}">校验快照不可变性</button>
+      <p class="muted" style="margin:7px 0 0">${same ? '当前任务状态与快照一致（演示校验：修改任务后再点此按钮观察差异）' : '当前任务状态已变化，快照内容仍保持提交瞬间的内容'}</p>
+    </div>`;
+  }
+
+  /* ---------------- 事件账本 ---------------- */
+  function renderEvents(gid) {
+    const list = state.events.filter((e) => !gid || e.groupId === gid || !e.groupId).sort((a, b) => b.ts - a.ts);
+    return `<div class="section-title"><h2>事件账本</h2><span class="muted">${list.length} 条 · 写 Event 100%</span></div>
+    <div class="card">${list.length ? list.map((e) => `
+      <div class="event-item">
+        <div class="ev-icon">${EV_ICON[e.type] || '·'}</div>
+        <div class="ev-body"><b>${esc(TYPE_LABEL[e.type] || e.type)}</b>
+        <div>${esc(user(e.actorId).name)}${e.taskId && task(e.taskId) ? ' · ' + esc(task(e.taskId).title) : ''}${e.payload.code ? ' · 邀请码 ' + esc(e.payload.code) : ''}${e.payload.version ? ' · v' + e.payload.version : ''}</div></div>
+        <time>${fmt(e.ts)}</time>
+      </div>`).join('') : `<div class="empty">暂无事件</div>`}</div>`;
+  }
+
+  /* ---------------- 成员管理 ---------------- */
+  function renderMembers(g, ids) {
+    const invites = state.invites.filter((i) => i.groupId === g.id && i.active && i.expiresAt > Date.now());
+    const pending = state.pendingJoins.filter((p) => p.groupId === g.id);
+    return `<div class="section-title"><h2>邀请与成员</h2><span class="muted">上限 ${g.memberLimit} 人</span></div>
+    <div class="card tight">
+      <div class="block-title"><span>有效邀请码</span><button class="link" data-act="invite-create">生成新的</button></div>
+      ${invites.length ? invites.map((i) => `<div class="code-box"><b>${esc(i.code)}</b><div style="text-align:right"><button class="btn xs ghost" data-act="copy-code" data-code="${i.code}">复制</button><div class="muted" style="margin-top:4px">${fmt(i.expiresAt)} 过期</div></div></div>`).join('') : `<p class="muted">暂无有效邀请码</p>`}
+      <p class="muted" style="margin:0">6 位邀请码 + 分享链接，7 天有效。${g.joinNeedConfirm ? '当前需组长确认入组。' : '当前无需确认，可直接入组。'}</p>
+      <button class="btn plain sm" style="margin-top:10px" data-act="toggle-confirm">${g.joinNeedConfirm ? '关闭入组确认' : '开启入组确认'}</button>
+    </div>
+    ${isLeader(g.id) && pending.length ? `<div class="card tight">
+      <div class="block-title"><span>入组申请（${pending.length}）</span></div>
+      ${pending.map((p) => `<div class="pending-row"><span class="avatar sm" style="background:${user(p.userId).color}">${esc(user(p.userId).name[0])}</span><span class="who">${esc(user(p.userId).name)} 申请加入</span>
+        <button class="btn xs" data-act="approve-join" data-id="${p.userId}">同意</button>
+        <button class="btn xs plain" data-act="deny-join" data-id="${p.userId}">拒绝</button></div>`).join('')}
+    </div>` : ''}
+    <div class="card tight">
+      <div class="block-title"><span>组内成员（${ids.length}）</span></div>
+      ${ids.map((id) => `<div class="pending-row"><span class="avatar sm" style="background:${user(id).color}">${esc(user(id).name[0])}</span><span class="who">${esc(user(id).name)}${id === g.ownerId ? ' <span class="tag">组长</span>' : ''}</span>
+        ${id === state.session && id !== g.ownerId ? `<button class="btn xs plain" data-act="exit-group">退出</button>` : ''}
+        ${isLeader(g.id) && id !== g.ownerId ? `<button class="btn xs plain" data-act="transfer-open" data-id="${id}">转让</button>` : ''}</div>`).join('')}
+    </div>`;
+  }
+
+  /* ---------------- 任务详情抽屉（F12 / F13 / F21） ---------------- */
+  function renderTaskSheet(t) {
+    const dlList = taskDeliverables(t.id);
+    const comments = state.comments.filter((c) => c.taskId === t.id).sort((a, b) => a.createdAt - b.createdAt);
+    const canAct = t.assigneeId === state.session || isLeader(t.groupId);
+    let actions = '';
+    if (t.status === 'unclaimed') actions = `<button class="btn" data-act="claim" data-id="${t.id}">一键认领</button>`;
+    else if (t.status === 'todo' && t.assigneeId === state.session) actions = `<button class="btn" data-act="start-task" data-id="${t.id}">开始任务</button>`;
+    else if (t.status === 'doing' && canAct) actions = `<button class="btn ghost" data-act="reassign-open" data-id="${t.id}">转派</button><button class="btn" data-act="submit-review" data-id="${t.id}">提交审核</button>`;
+    else if (t.status === 'review' && isLeader(t.groupId)) actions = `<button class="btn danger" data-act="reject-open" data-id="${t.id}">打回</button><button class="btn" data-act="approve" data-id="${t.id}">通过</button>`;
+    return `<div class="sheet-head">
+      <div><h2>${esc(t.title)}</h2><div class="sub">${esc(STATUS[t.status])} · 版本 v${t.version}</div></div>
+      <button class="close-x" data-act="close-modal">×</button>
+    </div>
+    <div class="detail-meta">
+      <span class="tag">负责人：${t.assigneeId ? esc(user(t.assigneeId).name) : '未认领'}</span>
+      <span class="tag">截止 ${fmt(t.due)}</span>
+      <span class="tag">负载 ${t.estimatedLoad}</span>
+      ${t.dependsOn.length ? `<span class="tag">依赖 ${t.dependsOn.map((id) => esc(task(id)?.title || id)).join('、')}</span>` : ''}
+    </div>
+    ${t.rejected ? `<div class="snapshot-banner" style="background:#fef2f2;border-color:#fecaca"><strong style="color:var(--danger)">已打回</strong><p style="color:#b91c1c">理由：${esc(t.rejectReason)}</p></div>` : ''}
+    <div class="detail-desc">${esc(t.description)}<div class="muted" style="margin-top:6px">交付物要求：${esc(t.deliverableSpec)}</div></div>
+    ${actions ? `<div class="btn-row" style="margin-bottom:14px">${actions}</div>` : ''}
+    <div class="divider"></div>
+    <div class="block-title"><span>交付物链接</span><span class="muted">版本链不可删除</span></div>
+    ${dlList.length ? dlList.map((d) => `<div class="deliverable">
+      <span class="favicon">${esc(d.type[0])}</span>
+      <span class="info"><strong>${esc(d.title)}</strong><span>v${d.version} · ${esc(d.type)} · ${esc(user(d.submittedBy).name)} · ${fmt(d.createdAt)}</span></span>
+      <a href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none">↗</a>
+    </div>`).join('') : `<p class="muted">尚未挂载交付物</p>`}
+    ${canAct && t.status !== 'done' ? `<div class="inline-fields" style="margin-top:9px">
+      <div class="field" style="flex:1.4"><input id="dl-title" placeholder="交付物标题" value="${esc(t.title)} · v${dlList.length + 1}"></div>
+      <div class="field" style="flex:.8"><select id="dl-type"><option>自动识别</option><option>腾讯文档</option><option>飞书文档</option><option>Google Docs</option><option>GitHub</option><option>网盘</option><option>其他链接</option></select></div>
+    </div>
+    <div class="field"><input id="dl-url" placeholder="https://… 粘贴可访问的文档 / 代码链接"><div class="hint">仅存链接、标题、类型、提交人与版本号，不存文件；每次提交版本自增。</div></div>
+    <button class="btn sm block" data-act="add-deliverable" data-id="${t.id}">提交新版本</button>` : ''}
+    <div class="divider"></div>
+    <div class="block-title"><span>讨论（${comments.length}）</span><span class="muted">评论不可删除 · 5 分钟内可编辑</span></div>
+    ${comments.map((c) => {
+      const editable = c.authorId === state.session && Date.now() - c.createdAt < 5 * 60 * 1000 && !c.editedAt;
+      return `<div class="comment">
+        <span class="avatar sm" style="background:${user(c.authorId).color}">${esc(user(c.authorId).name[0])}</span>
+        <div class="body"><div class="head"><b>${esc(user(c.authorId).name)}</b><span>${fmt(c.createdAt)}</span>${c.editedAt ? '<span>· 已编辑</span>' : ''}</div>
+        ${editable ? `<textarea class="comment-edit" id="edit-c-${c.id}">${esc(c.body)}</textarea><div class="btn-row" style="margin-top:5px"><button class="btn xs plain" data-act="cancel-edit">取消</button><button class="btn xs" data-act="save-comment-edit" data-id="${c.id}">保存</button></div>`
+          : `<p>${renderMentions(c.body)}</p>`}
+        </div></div>`;
+    }).join('')}
+    <div class="mention-bar">@ ${memberIds(t.groupId).filter((id) => id !== state.session).map((id) => `<button data-act="mention" data-name="${esc(user(id).name)}">${esc(user(id).name)}</button>`).join('')}</div>
+    <div class="field" style="margin-bottom:0"><textarea id="comment-input" placeholder="写下评论，可点击上方 @ 成员…"></textarea></div>
+    <button class="btn sm block" style="margin-top:8px" data-act="add-comment" data-id="${t.id}">发送评论</button>`;
+  }
+  function renderMentions(body) {
+    return esc(body).replace(/@([\u4e00-\u9fa5\w]+)/g, '<span class="mention">@$1</span>');
+  }
+
+  /* ---------------- 弹窗 ---------------- */
+  function renderModal() {
+    const root = $('#modal-root');
+    if (!modal) { root.innerHTML = ''; return; }
+    if (modal.type === 'task') {
+      const t = task(modal.id);
+      root.innerHTML = t ? `<div class="overlay" data-act="overlay-close"><div class="sheet" data-stop="1">${renderTaskSheet(t)}</div></div>` : '';
+      return;
+    }
+    let body = '';
+    if (modal.type === 'create-group') {
+      body = `<div class="sheet-head"><div><h2>创建新小组</h2><div class="sub">建组字段：组名、关联课程、成员上限</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        <div class="field"><label>组名</label><input id="g-name" placeholder="例如：第四小组 · 用户研究"></div>
+        <div class="field"><label>关联课程（可选）</label><input id="g-course" placeholder="例如：产品设计基础"></div>
+        <div class="inline-fields"><div class="field"><label>成员上限</label><input id="g-limit" type="number" min="2" max="30" value="8"></div>
+        <div class="field"><label>入组需确认</label><select id="g-confirm"><option value="1">是（默认）</option><option value="0">否</option></select></div></div>
+        <button class="btn block" data-act="create-group">创建并进入</button>`;
+    } else if (modal.type === 'join') {
+      body = `<div class="sheet-head"><div><h2>用邀请码入组</h2><div class="sub">6 位邀请码，7 天有效</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        <div class="field"><label>邀请码</label><input id="join-code" maxlength="6" placeholder="例如 A7K29Q" style="letter-spacing:.2em;text-transform:uppercase"></div>
+        <p class="muted">提示：默认邀请码是 <b>A7K29Q</b>。该组已开启「入组需组长确认」，输入后只是提交申请，需组长在「成员」页点「同意」才真正入组。若组长点过「生成新的」，旧码会立即失效，请使用成员页显示的新码。</p>
+        <button class="btn block" data-act="join-group">申请加入</button>`;
+    } else if (modal.type === 'invite') {
+      const g = group(ui.groupId);
+      const inv = state.invites.find((i) => i.groupId === g.id && i.active);
+      body = `<div class="sheet-head"><div><h2>邀请成员</h2><div class="sub">分享链接在微信内可直接打开小程序</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        ${inv ? `<div class="code-box"><b>${esc(inv.code)}</b><button class="btn xs ghost" data-act="copy-code" data-code="${inv.code}">复制邀请码</button></div>` : `<p class="muted">尚无有效邀请码</p>`}
+        <div class="field"><label>分享链接（模拟）</label><input readonly value="https://hackathon.demo/join?code=${inv ? inv.code : '------'}"></div>
+        <button class="btn ghost block" data-act="invite-create">重新生成邀请码</button>`;
+    } else if (modal.type === 'reject') {
+      body = `<div class="sheet-head"><div><h2>打回任务</h2><div class="sub">打回理由必填，任务回到「进行中」</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        <div class="field"><label>打回理由 <span style="color:var(--danger)">*</span></label><textarea id="reject-reason" placeholder="请说明需要修改的内容…"></textarea></div>
+        <button class="btn danger block" data-act="do-reject" data-id="${modal.id}">确认打回</button>`;
+    } else if (modal.type === 'final-submit') {
+      const g = group(ui.groupId);
+      const a = currentAssignment(g.id);
+      body = `<div class="sheet-head"><div><h2>${modal.force ? '强制提交' : '生成统一提交'}</h2><div class="sub">${esc(a.title)} · 写入不可变快照</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        ${modal.force ? `<div class="field"><label>强制提交理由 <span style="color:var(--danger)">*</span></label><textarea id="final-reason" placeholder="仍有任务未完成，请说明原因…"></textarea></div>` : `<p class="muted">将汇总全部任务的最新交付物版本、任务状态、时间戳与提交人，生成不可变快照。</p>`}
+        <button class="btn block" data-act="do-final-submit">确认提交</button>`;
+    } else if (modal.type === 'email') {
+      body = `<div class="sheet-head"><div><h2>邮箱验证码登录</h2><div class="sub">微信外 H5 兜底方案 · 验证码 60s 限频</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        <div class="field"><label>邮箱</label><input id="email-input" type="email" placeholder="name@example.edu" value="${esc((state.users[4] || state.users[0] || {}).email || '')}"></div>
+        <div class="field"><label>验证码</label><input id="code-input" placeholder="6 位验证码"><div class="hint" id="code-hint">点击发送后，演示验证码会显示在提示中</div></div>
+        <div class="btn-row"><button class="btn ghost" id="send-code-btn" data-act="send-code">发送验证码</button><button class="btn" data-act="email-do-login">登录</button></div>`;
+    } else if (modal.type === 'switch') {
+      body = `<div class="sheet-head"><div><h2>切换演示身份</h2><div class="sub">体验组长与成员的不同操作权限</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        ${state.users.map((u) => `<button class="btn plain block sm" style="margin-bottom:7px;justify-content:flex-start" data-act="pick-user" data-id="${u.id}"><span class="avatar sm" style="background:${u.color}">${esc(u.name[0])}</span>${esc(u.name)}${state.session === u.id ? '（当前）' : ''}</button>`).join('')}
+        <button class="btn ghost block sm" style="margin-top:10px" data-act="email-login-open">使用邮箱验证码登录</button>`;
+    } else if (modal.type === 'transfer') {
+      body = `<div class="sheet-head"><div><h2>转让组长</h2><div class="sub">转让后你将变为普通成员</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        <p style="font-size:13px">确认将组长转让给 <b>${esc(user(modal.id).name)}</b>？</p>
+        <button class="btn danger block" data-act="do-transfer" data-id="${modal.id}">确认转让</button>`;
+    } else if (modal.type === 'reassign') {
+      const t = task(modal.id);
+      body = `<div class="sheet-head"><div><h2>转派任务</h2><div class="sub">${esc(t.title)} · 仅组长或当前负责人可发起</div></div><button class="close-x" data-act="close-modal">×</button></div>
+        ${memberIds(t.groupId).map((id) => `<button class="btn plain block sm" style="margin-bottom:7px" data-act="do-reassign" data-id="${t.id}" data-to="${id}">转给 ${esc(user(id).name)}${id === t.assigneeId ? '（当前负责人）' : ''}</button>`).join('')}`;
+    }
+    root.innerHTML = `<div class="overlay" data-act="overlay-close"><div class="dialog" data-stop="1">${body}</div></div>`;
+  }
+
+  /* ---------------- 动作处理 ---------------- */
+  // 服务端错误文案是英文契约，视图侧统一译成中文；未收录的原样透出，不吞错。
+  const ERR_ZH = {
+    'already a member': '你已在该小组中',
+    'group is full': '小组已满员',
+    'invite not found': '邀请码无效或已过期；若组长生成过新码请用新码',
+    'not a group member': '你不是该组成员',
+    'group not found': '小组不存在',
+    'leader only': '仅组长可操作',
+    'only leader can invite': '仅组长可生成邀请码',
+    'only leader can approve': '仅组长可处理入组申请',
+    'only leader can deny': '仅组长可处理入组申请',
+    'only leader can edit settings': '仅组长可修改小组设置',
+    'only leader or assignee can reassign': '仅组长或当前负责人可转派',
+    'only assignee can start': '只有负责人可以开始',
+    'only author can edit': '只有作者可以编辑',
+    'already claimed': '任务已被认领，请刷新',
+    'no pending request': '该申请已处理',
+    'task not found': '任务不存在',
+    'comment not found': '评论不存在',
+    'draft not found': '草稿不存在',
+    'authentication required': '请先登录'
+  };
+  const errText = (e) => ERR_ZH[e.message] || e.message || '操作失败';
+  const cancel = (msg) => { const e = new Error(msg); e.cancel = true; throw e; };
+
+  // 写操作统一入口：先打 API，成功后 refresh 再渲染。
+  // 校验失败走 cancel，不 refresh 不 render——否则弹窗重建会抹掉用户正在输入的内容。
+  async function mutate(fn, after) {
+    if (busy) return;
+    busy = true;
+    try {
+      await fn();
+      await refresh();
+      apiError = '';
+      if (after) after();
+      render();
+    } catch (err) {
+      if (err.cancel) { toast(err.message, 'error'); return; }
+      if (err.status === 401) {
+        dropSession(); ui.view = 'login'; ui.groupId = null; modal = null;
+        render(); toast('会话已失效，请重新登录', 'error'); return;
+      }
+      toast(errText(err), 'error');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function handle(act, d, ev) {
+    const gid = ui.groupId;
+    switch (act) {
+      case 'overlay-close':
+        if (ev.target.classList.contains('overlay')) { modal = null; render(); }
+        return;
+      case 'close-modal': modal = null; render(); return;
+      case 'wx-login':
+        await mutate(async () => {
+          await login('wx_demo_1');
+          ui.view = 'groups';
+          toast('登录成功，已进入首页', 'success');
+        });
+        return;
+      case 'switch-user-open':
+        modal = { type: 'switch' }; renderModal(); return;
+      case 'switch-user':
+      case 'pick-user': {
+        const target = state.users.find((u) => u.id === (d.id || 'u1'));
+        if (!target) return toast('演示身份目录尚未加载', 'error');
+        await mutate(
+          async () => {
+            await login(target.wxOpenid || ('demo-' + target.id));
+            modal = null;
+            toast('已切换为 ' + target.name, 'success');
+          },
+          () => {
+            if (!group(ui.groupId) || !memberIds(ui.groupId).includes(state.session)) { ui.view = 'groups'; ui.tab = 'board'; }
+            else if (ui.view === 'login') ui.view = 'groups';
+          }
+        );
+        return;
+      }
+      case 'reset-demo':
+        await mutate(async () => {
+          await api('POST', '/v1/demo/reset');
+          dropSession();
+          ui.view = 'login'; ui.groupId = null; ui.tab = 'board'; modal = null;
+          toast('演示数据已重置', 'success');
+        });
+        return;
+      case 'email-login-open': modal = { type: 'email' }; renderModal(); return;
+      case 'send-code': {
+        const email = $('#email-input').value.trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('请输入有效邮箱', 'error');
+        if (Date.now() < emailCooldownUntil) return toast('发送过于频繁，请 60 秒后再试', 'error');
+        try {
+          // devCode 只是演示回显；真实环境验证码只进邮件，绝不出响应体。
+          const r = await api('POST', '/v1/auth/email-code', { email });
+          emailCooldownUntil = Date.now() + 60000;
+          toast('演示验证码：' + r.devCode, 'success');
+          $('#code-hint').textContent = '演示验证码：' + r.devCode + '（60s 限频已生效）';
+          const btn = $('#send-code-btn'); btn.disabled = true; btn.textContent = '60s 后重发';
+          setTimeout(() => { if (btn.isConnected) { btn.disabled = false; btn.textContent = '发送验证码'; } }, 60000);
+        } catch (err) { toast(errText(err), 'error'); }
+        return;
+      }
+      case 'email-do-login': {
+        const code = $('#code-input').value.trim();
+        if (!code) return toast('请输入验证码', 'error');
+        const email = $('#email-input').value.trim();
+        await mutate(async () => {
+          const r = await api('POST', '/v1/auth/email-login', { email, code });
+          token = r.token; state.session = r.userId; saveSession();
+          modal = null; ui.view = 'groups';
+          toast('邮箱登录成功', 'success');
+        });
+        return;
+      }
+      case 'back-groups': ui.view = 'groups'; ui.tab = 'board'; modal = null; render(); return;
+      case 'open-group': ui.groupId = d.id; ui.view = 'group'; ui.tab = 'board'; render(); return;
+      case 'tab': ui.tab = d.tab; render(); return;
+      case 'create-group-open': modal = { type: 'create-group' }; renderModal(); return;
+      case 'create-group': {
+        const name = $('#g-name').value.trim();
+        if (!name) return toast('请填写组名', 'error');
+        const limit = Math.min(30, Math.max(2, parseInt($('#g-limit').value, 10) || 8));
+        const course = $('#g-course').value.trim() || null;
+        const needConfirm = $('#g-confirm').value === '1';
+        await mutate(async () => {
+          const g = await api('POST', '/v1/groups', { name, course, memberLimit: limit, joinNeedConfirm: needConfirm });
+          await api('POST', `/v1/groups/${g.id}/invites`);
+          modal = null; ui.groupId = g.id; ui.view = 'group'; ui.tab = 'board';
+          toast('小组创建成功，邀请码已生成', 'success');
+        });
+        return;
+      }
+      case 'join-open': modal = { type: 'join' }; renderModal(); return;
+      case 'join-group': {
+        const code = $('#join-code').value.trim().toUpperCase();
+        if (!code) return toast('请输入邀请码', 'error');
+        await mutate(async () => {
+          const r = await api('POST', `/v1/invites/${code}/join`);
+          modal = null; ui.view = 'groups';
+          toast(r.joined ? '已加入小组' : '邀请码有效，已提交申请，等待组长确认', 'success');
+        });
+        return;
+      }
+      case 'invite-open': modal = { type: 'invite' }; renderModal(); return;
+      case 'invite-create':
+        await mutate(async () => {
+          const r = await api('POST', `/v1/groups/${gid}/invites`);
+          toast('新邀请码：' + r.code, 'success');
+        });
+        return;
+      case 'copy-code': {
+        const code = d.code;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(() => toast('已复制 ' + code), () => toast('邀请码：' + code));
+        else toast('邀请码：' + code);
+        return;
+      }
+      case 'toggle-confirm': {
+        const next = !group(gid).joinNeedConfirm;
+        await mutate(async () => {
+          await api('PUT', `/v1/groups/${gid}/settings`, { joinNeedConfirm: next });
+          toast(next ? '已开启入组确认' : '已关闭入组确认');
+        });
+        return;
+      }
+      case 'approve-join':
+        await mutate(async () => {
+          await api('POST', `/v1/groups/${gid}/join-requests/${d.id}/approve`);
+          toast('已同意入组', 'success');
+        });
+        return;
+      case 'deny-join':
+        await mutate(async () => {
+          await api('POST', `/v1/groups/${gid}/join-requests/${d.id}/deny`);
+          toast('已拒绝申请');
+        });
+        return;
+      case 'exit-group':
+        await mutate(async () => {
+          await api('POST', `/v1/groups/${gid}/exit`);
+          ui.view = 'groups'; ui.tab = 'board';
+          toast('已退出小组，操作已留痕', 'success');
+        });
+        return;
+      case 'transfer-open': modal = { type: 'transfer', id: d.id }; renderModal(); return;
+      case 'do-transfer':
+        // 转让不入账：冻结 Event schema v1 没有对应类型（与 group_create / invite_create 同批会签）。
+        await mutate(async () => {
+          await api('POST', `/v1/groups/${gid}/transfer`, { toUserId: d.id });
+          modal = null;
+          toast('组长已转让', 'success');
+        });
+        return;
+      case 'open-task':
+        ui.taskId = d.id; modal = { type: 'task', id: d.id }; renderModal();
+        try { await loadTaskDetail(d.id); renderModal(); }
+        catch (err) { toast(errText(err), 'error'); }
+        return;
+      case 'claim':
+        await mutate(async () => {
+          await api('POST', `/v1/tasks/${d.id}/claim`);
+          toast('认领成功，已进入待办', 'success');
+        });
+        return;
+      case 'start-task':
+        await mutate(async () => { await api('POST', `/v1/tasks/${d.id}/start`); });
+        return;
+      case 'submit-review': {
+        // 「先有交付物才能提交审核」目前只有前端校验，服务端未设守卫——登记 v1.1 会签。
+        if (!taskDeliverables(d.id).length) return toast('请先挂载至少一个交付物链接', 'error');
+        await mutate(async () => {
+          await api('POST', `/v1/tasks/${d.id}/submit`);
+          toast('已提交审核', 'success');
+        });
+        return;
+      }
+      case 'reassign-open': modal = { type: 'reassign', id: d.id }; renderModal(); return;
+      case 'do-reassign': {
+        const t = task(d.id);
+        if (!t) return;
+        if (t.assigneeId === d.to) { modal = null; render(); return toast('该成员已是当前负责人'); }
+        await mutate(async () => {
+          await api('POST', `/v1/tasks/${d.id}/reassign`, { to: d.to });
+          modal = null;
+          toast('已转派给 ' + user(d.to).name, 'success');
+        });
+        return;
+      }
+      case 'approve':
+        await mutate(async () => {
+          await api('POST', `/v1/tasks/${d.id}/reviews`, { action: 'approve' });
+          toast('审核通过', 'success');
+        });
+        return;
+      case 'reject-open': modal = { type: 'reject', id: d.id }; renderModal(); return;
+      case 'do-reject': {
+        const reason = $('#reject-reason').value.trim();
+        if (!reason) return toast('打回必须填写理由', 'error');
+        await mutate(async () => {
+          await api('POST', `/v1/tasks/${d.id}/reviews`, { action: 'reject', reason });
+          modal = null;
+          toast('已打回，任务回到进行中', 'success');
+        });
+        return;
+      }
+      case 'add-deliverable': {
+        const t = task(d.id);
+        const url = $('#dl-url').value.trim();
+        if (!isValidUrl(url)) return toast('仅支持 http/https 链接', 'error');
+        const title = $('#dl-title').value.trim() || t.title;
+        const sel = $('#dl-type').value;
+        const type = sel === '自动识别' ? urlType(url) : sel;
+        await mutate(async () => {
+          const r = await api('POST', `/v1/tasks/${d.id}/deliverables`, { url, title, type });
+          toast('交付物 v' + r.version + ' 已保存', 'success');
+        });
+        return;
+      }
+      case 'add-comment': {
+        const body = $('#comment-input').value.trim();
+        if (!body) return toast('请输入评论内容', 'error');
+        const mentions = state.users.filter((u) => body.includes('@' + u.name)).map((u) => u.id);
+        await mutate(async () => {
+          await api('POST', `/v1/tasks/${d.id}/comments`, { body, mentions });
+          toast('评论已发送', 'success');
+        });
+        return;
+      }
+      case 'mention': {
+        const input = $('#comment-input');
+        if (!input) return;
+        input.value += (input.value && !input.value.endsWith(' ') ? ' ' : '') + '@' + d.name + ' ';
+        input.focus(); return;
+      }
+      case 'cancel-edit': render(); return;
+      case 'save-comment-edit': {
+        const v = $('#edit-c-' + d.id).value.trim();
+        if (!v) return toast('评论内容不能为空', 'error');
+        const mentions = state.users.filter((u) => v.includes('@' + u.name)).map((u) => u.id);
+        await mutate(async () => {
+          await api('PUT', '/v1/comments/' + d.id, { body: v, mentions });
+          toast('评论已编辑（保留留痕）', 'success');
+        });
+        return;
+      }
+      case 'final-submit-open': modal = { type: 'final-submit', force: d.force === '1' }; renderModal(); return;
+      case 'do-final-submit': {
+        const a = currentAssignment(gid);
+        if (!a) return toast('该小组还没有作业', 'error');
+        const unfinished = state.tasks.filter((t) => t.groupId === gid && t.status !== 'done');
+        let forceReason;
+        if (unfinished.length) {
+          forceReason = $('#final-reason').value.trim();
+          if (!forceReason) return toast('强制提交必须填写理由', 'error');
+        }
+        await mutate(async () => {
+          await api('POST', `/v1/assignments/${a.id}/final-submissions`, forceReason ? { forceReason } : {});
+          modal = null; ui.tab = 'submit';
+          toast('不可变快照已生成', 'success');
+        });
+        return;
+      }
+      case 'verify-snapshot': {
+        const s = state.finalSubmissions.find((x) => x.id === d.id);
+        if (!s) return;
+        try {
+          // 回服务端重读快照，而不是拿前端缓存自证——不可变性要由记录系统背书。
+          const remote = await api('GET', `/v1/assignments/${s.assignmentId}/final-submissions/latest`);
+          if (remote.id !== s.id) return toast('已有更新的快照，当前展示的是历史快照', 'success');
+          const current = state.tasks.filter((t) => t.groupId === s.groupId).map((t) => [t.id, t.status]);
+          const snap = remote.tasks.map((t) => [t.id, toViewStatus(t)]);
+          if (JSON.stringify(current) === JSON.stringify(snap)) toast('校验通过：快照与当前状态一致', 'success');
+          else toast('已检测到状态变化，但快照内容保持不变 ✓', 'success');
+        } catch (err) { toast(errText(err), 'error'); }
+        return;
+      }
+      default: return;
+    }
+  }
+
+  /* ---------------- 事件绑定与启动 ---------------- */
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    if (el.dataset.act === 'overlay-close' && e.target.closest('[data-stop]')) return;
+    e.preventDefault();
+    Promise.resolve(handle(el.dataset.act, el.dataset, e)).catch((err) => toast(errText(err), 'error'));
+  });
+
+  // 轮询承担原 storage 事件的跨标签页同步。弹窗打开时不重渲染，避免抹掉正在输入的内容。
+  setInterval(async () => {
+    if (!state.session || modal || busy || document.hidden) return;
+    try {
+      const before = JSON.stringify(state);
+      await refresh();
+      apiError = '';
+      if (JSON.stringify(state) !== before) render();
+    } catch (err) {
+      if (err.status === 401) { dropSession(); ui.view = 'login'; render(); }
+    }
+  }, 2500);
+
+  (async () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      if (saved && saved.token) { token = saved.token; state.session = saved.userId; }
+    } catch (_) { /* 会话缓存损坏则回到登录页 */ }
+    try {
+      await refresh();
+      apiError = '';
+      if (state.session) ui.view = 'groups';
+    } catch (err) {
+      if (err.status === 401) dropSession();
+      else apiError = err.message;
+    }
+    render();
+  })();})();
+
+</script>
+</body>
+</html>

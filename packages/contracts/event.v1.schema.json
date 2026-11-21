@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "groupwork/contracts/event.v1.schema.json",
+  "title": "Event v1",
+  "description": "canonical owner = C 线；冻结契约，变更需三线会签。本文件是 Event 类型表与载荷形状的唯一真源：e2e/lib/ledger.js 从此处读取类型表，A 原型（file:// 自包含单文件，无法跨源 import）保留标签副本并由 e2e/contracts.test.js 守一致，真 B 的写入类型由同一测试断言落在 enum 内。report_export 于 F27 导出入账时新增：v1 原十七类无一能承载「导出报告」语义，复用 contribution_adjust/final_submit 会污染 A/B 消费。",
+  "type": "object",
+  "required": ["eventId", "groupId", "assignmentId", "type", "actorId", "objectRef", "payload", "occurredAt"],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "幂等键。同 eventId 重复入账返回 200 {duplicate:true}，不产生第二条账本记录。"
+    },
+    "groupId": { "type": "string", "minLength": 1 },
+    "assignmentId": {
+      "type": ["string", "null"],
+      "description": "组级事件（member_join/member_exit 等）为 null；读取作业时间线时，同组的 null 事件并入该作业（README 缺口 #5）。"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "member_join",
+        "member_exit",
+        "claim",
+        "reassign",
+        "start",
+        "submit",
+        "reject",
+        "approve",
+        "comment",
+        "deliverable_update",
+        "ddl_change",
+        "final_submit",
+        "review_submit",
+        "yellow_card",
+        "dispute_open",
+        "dispute_resolve",
+        "contribution_adjust",
+        "report_export"
+      ],
+      "description": "冻结十八类。group_create/invite_create/group_transfer/comment_edit/task_create/reminder_sent/milestone_done 七类不在表内，扩展需 v1.1 会签（见 docs/merge-v1.1-signoff.md §1.4）。"
+    },
+    "actorId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "动作发起者 uid；系统动作（黄牌）为 'system'。"
+    },
+    "objectRef": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "additionalProperties": false,
+      "description": "不透明对象引用。时间线全组可读，故互评事件只留 review id，绝不写 revieweeId 或分数（隐私红线）。",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "现网观测到的取值：group / task / comment / final_submission / review_window / peer_review / contribution_report / yellow_card。不做 enum 硬约束，新增 kind 随动作端点会签。"
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "按 type 约定的附加字段，缺省 {}。各类型现网载荷见 x-payload-by-type；未列出的类型载荷为 {}。",
+      "x-payload-by-type": {
+        "claim": { "from": "string|null", "to": "string" },
+        "reassign": { "from": "string|null", "to": "string" },
+        "deliverable_update": { "version": "integer", "url": "string" },
+        "comment": { "taskId": "string", "mentions": "string[]" },
+        "reject": { "reason": "string" },
+        "final_submit": { "taskCount": "integer" },
+        "review_submit": { "kind": "window_open|score|addendum", "windowId": "string" },
+        "yellow_card": { "memberId": "string", "streak": "integer", "level": "1|2" },
+        "report_export": { "formats": "string[]（现网恒 ['pdf','image']）" }
+      }
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601。时间线按 occurredAt 倒序，同时刻以入账序 seq 兜底（seq 为服务端内部字段，不出接口）。"
+    }
+  }
+}

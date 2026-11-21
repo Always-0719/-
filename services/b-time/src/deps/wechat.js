@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // dev 无 AppID/Secret → outbox jsonl 落盘便于断言；生产配齐凭证走 subscribeMessage.send
-export function outboxAdapter(dir = process.env.OUTBOX_DIR || path.resolve(here, '../../outbox')) {
+export function outboxAdapter(dir) {
+  // .env 里的 OUTBOX_DIR=（空值）会绕过默认参数（默认参数只对 undefined 生效），故在此兜底
+  dir = dir || process.env.OUTBOX_DIR || path.resolve(here, '../../outbox');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'wechat.jsonl');
   return {

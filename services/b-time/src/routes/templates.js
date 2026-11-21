@@ -67,6 +67,7 @@ export function registerTemplates({ route, db }) {
 
     const group = await getGroup(groupId, c.token);
     if (group.status === 404) return { status: 404, body: { error: 'group not found' } };
+    if (group.status === 403) return { status: 403, body: { error: 'not a group member' } };
     if (group.status !== 200) return { status: 502, body: { error: 'A 组详情查询失败' } };
     if (group.body.ownerId !== c.uid) return { status: 403, body: { error: 'leader only' } };
 

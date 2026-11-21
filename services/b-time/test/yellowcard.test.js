@@ -170,7 +170,10 @@ test('mock 账本集成：真 stats/真 writeEvent → timeline 可查 yellow_ca
     }).then(async r => ({ status: r.status, body: await r.json() }));
     const leader = (await api('POST', '/v1/auth/wechat-login', { body: { code: 'yc-leader' } })).body;
     const member = (await api('POST', '/v1/auth/wechat-login', { body: { code: 'yc-m1' } })).body;
-    const g = (await api('POST', '/v1/groups', { token: leader.token, body: { name: '黄牌走查组' } })).body;
+    const g = (await api('POST', '/v1/groups', { token: leader.token, body: { name: '黄牌走查组', joinNeedConfirm: false } })).body;
+    // 前置：被评人必须先在组内，claim 才会 200（mock 与真 A 同样校验成员身份）。
+    const inv = (await api('POST', `/v1/groups/${g.id}/invites`, { token: leader.token })).body;
+    assert.equal((await api('POST', `/v1/invites/${inv.code}/join`, { token: member.token })).status, 200);
     const aid = 'a-yc-ledger';
     const past = Date.now() - 2 * HOUR;
     const fd = await api('POST', `/v1/internal/assignments/${aid}/tasks:fromDraft`, {
@@ -197,7 +200,7 @@ test('mock 账本集成：真 stats/真 writeEvent → timeline 可查 yellow_ca
     assert.ok(card.notified_leader_at);
 
     const { timeline, assertEventShape } = await import('../../../e2e/lib/ledger.js');
-    const evs = await timeline(aid, leader.token, '?type=yellow_card');
+    const evs = await timeline(aid, leader.token, { type: 'yellow_card' });
     assert.equal(evs.length, 1);
     assertEventShape(evs[0]);
     assert.equal(evs[0].actorId, 'system');
@@ -208,7 +211,7 @@ test('mock 账本集成：真 stats/真 writeEvent → timeline 可查 yellow_ca
 
     const r2 = await svc.scan();
     assert.equal(r2.created, 0);
-    assert.equal((await timeline(aid, leader.token, '?type=yellow_card')).length, 1);
+    assert.equal((await timeline(aid, leader.token, { type: 'yellow_card' })).length, 1);
   } finally {
     db.close();
     await stopMock(mock.child);

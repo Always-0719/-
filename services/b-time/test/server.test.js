@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import fs from 'node:fs';
 import { openDb, migrate } from '../src/db.js';
 import { createApp } from '../src/server.js';
 
@@ -27,17 +28,18 @@ test('服务骨架：healthz 200、未知路由 404、受保护路由未登录 4
   db.close();
 });
 
-test('H5 静态托管：index/api.js 200、未知 404、编码目录穿越 403', async () => {
+test('H5 静态托管：index/api.js 200、未知 404、编码目录穿越不泄露', async () => {
   const db = openDb(':memory:');
   migrate(db);
   const { server } = createApp({ db });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
-  // 原始请求路径（不被客户端 URL 归一化）；Windows 下 %5C 解码为反斜杠可逃逸根目录
+  // 原始请求路径（不被客户端 URL 归一化）；连响应体一起取回，供「不泄露」判据使用
   const rawGet = (p) => new Promise((resolve, reject) => {
     const r = http.get({ host: '127.0.0.1', port: server.address().port, path: p }, (res) => {
-      res.resume();
-      resolve(res.statusCode);
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
     });
     r.on('error', reject);
   });
@@ -52,9 +54,25 @@ test('H5 静态托管：index/api.js 200、未知 404、编码目录穿越 403',
     assert.ok(js.headers.get('content-type').includes('text/javascript'));
 
     assert.equal((await fetch(`${base}/h5/nope.html`)).status, 404);
-    // %5C 解码成反斜杠可逃逸根目录 → 守卫 403；%2e%2e 被 URL 归一化折叠 → 404
-    assert.equal(await rawGet('/h5/..%5C..%5Cservices/b-time/package.json'), 403);
-    assert.equal(await rawGet('/h5/%2e%2e/%2e%2e/services/b-time/package.json'), 404);
+    // 目录穿越的验收口径是「不泄露」，不锁某个具体状态码：Node 各版本对 %5C / %2e%2e
+    // 的 URL 归一化时机不同，守卫可能来不及触发就已 404。判据＝拒绝类状态码 + 响应体不含
+    // 被穿越文件的任何内容；守卫被删而文件真被读出时，下面的 marker 断言必红。
+    // 前两条在 Node v24 上到不了守卫（%2e%2e/ 被 URL 折叠掉、%5C 在 POSIX 是普通字符），
+    // 后两条把斜杠也编码，能活着进 decodeURIComponent，才真正考验守卫。
+    const target = fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const markers = [target, '"name": "b-time"', 'node --env-file-if-exists=.env src/server.js'];
+    for (const p of [
+      '/h5/..%5C..%5Cservices/b-time/package.json',
+      '/h5/%2e%2e/%2e%2e/services/b-time/package.json',
+      '/h5/%2e%2e%2f%2e%2e%2fservices/b-time/package.json',
+      '/h5/..%2f..%2fservices/b-time/package.json',
+    ]) {
+      const r = await rawGet(p);
+      assert.ok([403, 404].includes(r.status), `${p} 穿越应被拒绝（403/404），实际 ${r.status}`);
+      for (const marker of markers) {
+        assert.ok(!r.body.includes(marker), `${p} 泄露了 package.json 内容：${r.body.slice(0, 120)}`);
+      }
+    }
   } finally {
     server.close();
     db.close();

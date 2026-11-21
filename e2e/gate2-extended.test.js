@@ -1,8 +1,11 @@
-// 集成门 2 扩展 e2e：B 两条需真 B（E2E_TARGET=staging）解除 skip；互评/导出两条保持 skip 归 C。
+// 集成门 2 扩展 e2e（三线合并版）。
+// B 段（提醒/黄牌）需真 B：E2E_TARGET=staging 解除 skip，纯 mock 下条件 skip。
+// C 段（互评/导出）已接真 → 此处只留哨兵冒烟，细粒度验收在 f26-review.test.js / f27-report.test.js。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { req } from './lib/http.js';
 import { timeline } from './lib/ledger.js';
+import { login, finishedAssignment, openWindow, reviewViaEvidence } from './lib/fixtures.js';
 
 const staging = process.env.E2E_TARGET === 'staging';
 const bSkip = staging ? false : 'gate2 B 段需真 B（E2E_TARGET=staging）';
@@ -119,7 +122,8 @@ test('黄牌分级：本人私下提醒 → 连续 2 次升级组长', { skip: b
   assert.ok(memberNotes.some(n => n.type === 'yellow_card_self'), '本人应收到私下提醒');
 
   // 账本存在 yellow_card 事件且 actor 为系统
-  const evs = await timeline(aid, leader, '?type=yellow_card');
+  // 合并修正：timeline 第三参是 {memberId,type} 对象（C 版签名），原 B 版传查询串会静默不过滤。
+  const evs = await timeline(aid, leader, { type: 'yellow_card' });
   assert.equal(evs.length, 1);
   assert.equal(evs[0].actorId, 'system');
   assert.equal(evs[0].payload.streak, 2);
@@ -127,18 +131,61 @@ test('黄牌分级：本人私下提醒 → 连续 2 次升级组长', { skip: b
   // 重扫幂等：不重复发卡/入账
   await req('b', 'POST', '/v1/internal/schedule/tick', { body: {} });
   assert.equal((await req('b', 'GET', `/v1/internal/yellow-cards?assignmentId=${aid}`)).body.cards.length, 1);
-  assert.equal((await timeline(aid, leader, '?type=yellow_card')).length, 1);
+  assert.equal((await timeline(aid, leader, { type: 'yellow_card' })).length, 1);
 });
 
-test('证据锚定互评：校准→证据面板强制→匿名汇总', { skip: 'gate2：待 C 互评服务与 A tasks-full 接真' }, async () => {
-  // TODO: 未完成校准示例 → 提交评分 409；
-  // TODO: review-evidence 未加载（mock 故障注入）→ 提交被拒；
-  // TODO: 提交后 PUT/重复提交被拒；追加补充说明留痕；
-  // TODO: summary 接口不含 reviewer_id 个体映射（隐私红线）。
+test('证据锚定互评：校准→证据面板强制→匿名汇总', async () => {
+  const leader = await login('g2-rev-leader');
+  const m2 = await login('g2-rev-m2');
+  const m3 = await login('g2-rev-m3');
+  const { aid } = await finishedAssignment(leader, m2, m3, '门2互评哨兵');
+
+  const w = await openWindow(leader.token, aid);
+  assert.notEqual(w.status, 501, '互评窗口仍返回 501 = 未接真');
+  assert.equal(w.status, 201);
+
+  const ev = await req('c', 'GET', `/v1/assignments/${aid}/review-evidence?memberId=${m3.userId}`, { token: m2.token });
+  assert.notEqual(ev.status, 501, '证据面板仍返回 501 = 未接真');
+  assert.equal(ev.status, 200);
+  assert.ok(ev.body.evidenceToken, '面板必须下发证据令牌');
+  assert.ok(ev.body.panel.timeline.length > 0, '面板须含被评人时间线');
+
+  const noEvidence = await req('c', 'POST', `/v1/assignments/${aid}/reviews`, {
+    token: m2.token,
+    body: { revieweeId: m3.userId, scores: { contribution: 4, quality: 4, collaboration: 4, punctuality: 4 }, comment: '裸打分', calibrated: true },
+  });
+  assert.equal(noEvidence.status, 409, '无证据面板不可评分');
+
+  const ok = await reviewViaEvidence(m2, aid, m3.userId);
+  assert.notEqual(ok.status, 501, '互评提交仍返回 501 = 未接真');
+  assert.equal(ok.status, 201);
+
+  const sum = await req('c', 'GET', `/v1/assignments/${aid}/reviews/summary`, { token: leader.token });
+  assert.notEqual(sum.status, 501, '互评汇总仍返回 501 = 未接真');
+  assert.equal(sum.status, 200);
+  const raw = JSON.stringify(sum.body);
+  assert.ok(!raw.includes('reviewerId') && !raw.includes('裸打分') && !raw.includes('按证据打分'), '汇总泄露个体评分/评语');
 });
 
-test('贡献报告导出：PDF/长图 + 不含个体评分', { skip: 'gate2：待 C 导出服务接真' }, async () => {
-  // TODO: export ≤10s；产物 URL 可下载；
-  // TODO: 报告内容断言含时间线/完成率/匿名汇总，不含个体评分明细；
-  // TODO: 非组内成员导出 403。
+test('贡献报告导出：PDF/长图 + 不含个体评分', async () => {
+  const leader = await login('g2-rpt-leader');
+  const m2 = await login('g2-rpt-m2');
+  const m3 = await login('g2-rpt-m3');
+  const outsider = await login('g2-rpt-outsider');
+  const { aid } = await finishedAssignment(leader, m2, m3, '门2导出哨兵');
+  await openWindow(leader.token, aid);
+  await reviewViaEvidence(m2, aid, m3.userId);
+
+  const r = await req('c', 'POST', `/v1/reports/${aid}/export`, { token: leader.token, body: {} });
+  assert.notEqual(r.status, 501, '报告导出仍返回 501 = 未接真');
+  assert.equal(r.status, 201);
+  assert.ok(r.body.pdfUrl && r.body.imageUrl, '须给 PDF 与长图两种产物链接');
+  assert.ok(r.body.content.stats && r.body.content.peerReviewSummary, '报告须含完成率与互评匿名汇总');
+  assert.ok(r.body.content.memberSummaries.length > 0, '报告须含成员任务时间线摘要');
+
+  const raw = JSON.stringify(r.body);
+  assert.ok(!raw.includes('reviewerId') && !raw.includes('"scores"') && !raw.includes('按证据打分'), '报告泄露个体评分明细');
+
+  const denied = await req('c', 'POST', `/v1/reports/${aid}/export`, { token: outsider.token, body: {} });
+  assert.equal(denied.status, 403, '非组内成员导出必须 403');
 });

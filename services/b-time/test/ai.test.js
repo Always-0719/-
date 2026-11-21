@@ -214,3 +214,18 @@ test('HTTP：provider 失败 → 201 降级模板 + 降级响应头，body 仍�
   assert.equal(log.degraded, 1);
   assert.equal(log.degraded_reason, 'provider-error');
 });
+
+// A 的组详情对组外成员返回 403；assertLeader 原把它吞成 502，调用方会误判为「A 挂了」而重试。
+test('HTTP：A 返回 403 时透传 403，不得吞成 502（ai-draft 与 commit 两条路径）', async () => {
+  const outsider = (await api(mock.base, 'POST', '/v1/auth/wechat-login', { body: { code: 'ai-outsider' } })).body;
+  const body = { requirementsText: '越权拆解', finalDdl: ddl, groupId: gid };
+  const r = await api(base, 'POST', '/v1/assignments/ai-draft', { token: outsider.token, body });
+  assert.equal(r.status, 403, `非组成员 ai-draft 应 403，实际 ${r.status}`);
+  assert.equal(r.body.error, 'not a group member');
+
+  const mine = await api(base, 'POST', '/v1/assignments/ai-draft', { token: leader.token, body });
+  assert.equal(mine.status, 201);
+  const c = await api(base, 'POST', `/v1/drafts/${mine.body.draftId}/commit`, { token: outsider.token });
+  assert.equal(c.status, 403, `非组成员 commit 他人草稿应 403，实际 ${c.status}`);
+  assert.equal(c.body.error, 'not a group member');
+});

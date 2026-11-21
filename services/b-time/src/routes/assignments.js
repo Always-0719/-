@@ -7,6 +7,7 @@ import { getGroup, tasksFromDraft, listTasks } from '../deps/a-client.js';
 async function assertLeader(c, groupId) {
   const g = await getGroup(groupId, c.token);
   if (g.status === 404) return { denied: { status: 404, body: { error: 'group not found' } } };
+  if (g.status === 403) return { denied: { status: 403, body: { error: 'not a group member' } } };
   if (g.status !== 200) return { denied: { status: 502, body: { error: 'A 组详情查询失败' } } };
   if (g.body.ownerId !== c.uid) return { denied: { status: 403, body: { error: 'leader only' } } };
   return { group: g.body };

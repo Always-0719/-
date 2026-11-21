@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { request } from '../src/deps/http.js';
 import { baseA, getGroup, tasksFromDraft, listTasks } from '../src/deps/a-client.js';
 import { baseC, writeEvent, flushEventQueue, queuePath, getOverdueStats } from '../src/deps/c-client.js';
+import { emailFromEnv, outboxAdapter } from '../src/deps/email.js';
+import { wechatFromEnv } from '../src/deps/wechat.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mockEntry = path.resolve(here, '../../../e2e/mock/server.js');
@@ -98,7 +100,10 @@ test('C 客户端：逾期统计（fixture 逾期任务驱动）', async () => {
   const login = await request('POST', `${base}/v1/auth/wechat-login`, { body: { code: 'deps-late' } });
   const token = login.body.token;
   const uid = login.body.userId;
-  await tasksFromDraft('a-deps-overdue', draft(days(-1)));
+  // 前置：claim 要求调用者是组成员，且任务须挂在真实组下（否则 mock 查不到 assignment）。
+  const g = await request('POST', `${base}/v1/groups`, { token, body: { name: 'deps 逾期组' } });
+  assert.equal(g.status, 201);
+  await tasksFromDraft('a-deps-overdue', draft(days(-1)), g.body.id);
   const tasks = await listTasks({ assignmentId: 'a-deps-overdue' });
   await request('POST', `${base}/v1/tasks/${tasks.body.tasks[0].id}/claim`, { token });
   const stats = await getOverdueStats('a-deps-overdue');
@@ -135,4 +140,27 @@ test('切真开关：USE_MOCK=false 且缺 REAL_URL 时显式报错', () => {
   delete process.env.C_REAL_URL;
   assert.throws(() => baseC(), /C_REAL_URL/);
   Object.assign(process.env, saved);
+});
+
+// .env.example 出厂就带 OUTBOX_DIR=（空值）。空字符串会绕过 JS 默认参数（只对 undefined 生效），
+// 修复前 emailFromEnv/wechatFromEnv 直接 mkdirSync('') 崩，服务起不来。
+test('OUTBOX_DIR 空值：回落默认 outbox 目录而不是崩溃', () => {
+  const saved = process.env.OUTBOX_DIR;
+  const defaultDir = path.resolve(here, '../outbox');
+  const existed = fs.existsSync(defaultDir);
+  process.env.OUTBOX_DIR = '';
+  try {
+    const env = { ...process.env, SMTP_HOST: '', WECHAT_ENABLED: 'true', WECHAT_APPID: '', WECHAT_SECRET: '', WECHAT_TEMPLATE_ID: '' };
+    const email = emailFromEnv(env);
+    assert.equal(email.kind, 'outbox');
+    assert.equal(email.file, path.join(defaultDir, 'emails.jsonl'));
+    const wechat = wechatFromEnv(env);
+    assert.equal(wechat.kind, 'outbox');
+    assert.equal(wechat.file, path.join(defaultDir, 'wechat.jsonl'));
+    assert.equal(outboxAdapter('').file, path.join(defaultDir, 'emails.jsonl'));
+    assert.ok(fs.existsSync(defaultDir), '默认目录应被创建');
+  } finally {
+    if (saved === undefined) delete process.env.OUTBOX_DIR; else process.env.OUTBOX_DIR = saved;
+    if (!existed) fs.rmSync(defaultDir, { recursive: true, force: true });
+  }
 });

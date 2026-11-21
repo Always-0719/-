@@ -1,0 +1,2473 @@
+openapi: 3.0.3
+info:
+  title: 别鸽了 · 小组作业协作层 API
+  version: 1.0.0
+  description: |
+    三线（A 组队与协作 / B 智能与时间 / C 证据与评价）合并后的端点全集，共 66 条：
+    e2e mock 实现 56 条 + 真 B 服务独占 10 条（含 /healthz）。按**现网实现**定形，不是目标设计。
+
+    ## 实现落点
+    - `x-implemented-by: [mock]` —— 只有 e2e/mock/server.js 实现（真 A / 真 C 服务尚未落地）。
+    - `x-implemented-by: [mock, b-time]` —— mock 与 services/b-time 都实现；两者语义有差异时在该端点
+      description 里逐条写明，**差异未收敛前不得视为同一契约**。
+    - `x-implemented-by: [b-time]` —— 只有真 B 实现，纯 mock 模式下对应 e2e 条件 skip。
+
+    ## provisional 标记
+    `x-provisional: true` 的端点没有任何契约来源：A-组队与协作-PRD.md §5.1「本线提供（v1 冻结）」
+    未定义它们（该 PRD 位于仓库外，本轮已逐条核对）。它们是合并时为了让 A 原型「全功能接真」而发明的形状，
+    真 A 后端落地后很可能不一致而要返工。会签时要么追认形状、要么给出真形状。
+    清单与代价见 docs/merge-v1.1-signoff.md §2。
+
+    ## 已声明但未实现（不在本文件 paths 内，属契约缺口）
+    - `WS /v1/ws`（A-PRD §5.1）：评论与任务状态推送，无实现。
+    - `GET /v1/teacher/assignments/{aid}/timeline`、`POST /v1/teacher/assignments/{aid}/grants`
+      （C-PRD §4.1，标注「预留 · P2 · 本次不实现」）：教师视角，无实现。
+    - `POST /v1/events` 在 mock 侧不校验 type 与载荷形状（Event schema 由消费方与 e2e 守），
+      真 C 落地时须在入口按 packages/contracts/event.v1.schema.json 校验。
+
+    ## 冻结载荷
+    TaskDraft v1 与 Event v1 的规范形状以同目录 JSON Schema 为准（本文件用 $ref 引用）：
+    - taskdraft.v1.schema.json（canonical owner = B）
+    - event.v1.schema.json（canonical owner = C）
+servers:
+  - url: http://127.0.0.1:8787
+    description: e2e mock（A/B/C 共用基座，MOCK_PORT 可改）
+  - url: http://127.0.0.1:8788
+    description: 真 B 服务 b-time（B_PORT 可改；同时托管 /h5 静态页与 /dev/a 代理）
+tags:
+  - name: auth
+    description: 登录与会话（A）
+  - name: group
+    description: 组队、邀请、成员管理（A）
+  - name: draft
+    description: 模板 / AI 拆解 / 草稿 / 里程碑（B）
+  - name: board
+    description: 看板与任务状态机、交付物、评论、审核、统一提交（A）
+  - name: evidence
+    description: Event 账本、时间线、统计、互评、报告（C）
+  - name: internal
+    description: 服务间调用（MVP 仅内网可达，多数免应用层鉴权）
+  - name: notify
+    description: 站内通知与微信订阅配额（B）
+  - name: ops
+    description: 健康检查与观测（B）
+security:
+  - bearerAuth: []
+paths:
+  /v1/auth/wechat-login:
+    post:
+      tags: [auth]
+      summary: 微信小程序一键授权登录
+      description: |
+        mock：code 命中种子用户 wxOpenid 时复用其固定 userId（供原型切换演示角色），
+        否则 userId = `u-${code}`、token = `tok-${code}`。无真实微信校验。
+        真 B 不实现此端点；H5 经 `/dev/a` 代理转发到 mock。
+      x-owner: A
+      x-implemented-by: [mock]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: wx.login 的 code；mock 下任意非空字符串即可登录 }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/auth/email-code:
+    post:
+      tags: [auth]
+      summary: 下发邮箱验证码
+      description: |
+        mock 把验证码回显在 `devCode` 里仅供演示；真实环境验证码只进邮件，绝不出响应体。
+        x-prd-gap：A-PRD F1 要求「邮箱验证码 60s 限频」，mock 未实现。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-prd-gap: 60s 限频未实现；devCode 回显仅限演示
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: 已下发
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sent, devCode]
+                properties:
+                  sent: { type: boolean }
+                  devCode: { type: string, description: 仅 mock 演示回显 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/auth/email-login:
+    post:
+      tags: [auth]
+      summary: 邮箱登录（微信外 H5 兜底）
+      description: |
+        `code` 可选：既有 e2e 只传 email 直登；传 code 时按已下发的演示验证码校验。
+        userId 优先复用同 email 的既有 profile，否则 `u-${email}`。
+      x-owner: A
+      x-implemented-by: [mock]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/users:
+    get:
+      tags: [auth]
+      summary: 演示身份目录（登录前可渲染「点击直接切换」）
+      description: |
+        **public 免鉴权**，返回全员 profile（含 email）。演示可接受，上线前必须去掉或加 internal 鉴权。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型登录页账号目录 / @提及 / 成员昵称而发明
+      security: []
+      responses:
+        '200':
+          description: 用户目录
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users]
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/Profile' }
+  /v1/demo/reset:
+    post:
+      tags: [auth]
+      summary: 清空内存库并重新播种演示数据
+      description: '**public 免鉴权**，任何人可清库。上线前必须去掉或加鉴权。'
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型「重置演示数据」按钮而发明
+      security: []
+      responses:
+        '200':
+          description: 已重置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+  /v1/groups:
+    post:
+      tags: [group]
+      summary: 建组
+      description: |
+        建组者即组长并自动入组。`joinNeedConfirm` 缺省 true（`!== false`），`memberLimit` 缺省 8。
+        不写 Event：冻结 18 类无 group_create，按裁定丢弃并登记会签。
+        mock 不校验 name 非空。
+      x-owner: A
+      x-implemented-by: [mock]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                course: { type: string, nullable: true }
+                memberLimit: { type: integer, default: 8 }
+                color: { type: string, description: 缺省按调色板轮转 }
+                joinNeedConfirm: { type: boolean, default: true }
+      responses:
+        '201':
+          description: 建组成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, ownerId]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  ownerId: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      tags: [group]
+      summary: 我的组列表
+      description: 只返回本人所在组（不是全量目录），与 `GET /v1/groups/{gid}` 的「非成员 403」配套。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 只定义 POST /v1/groups 与 GET /v1/groups/{gid}；首页小组列表入口为本轮发明
+      responses:
+        '200':
+          description: 组列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups]
+                properties:
+                  groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/GroupSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/groups/{gid}:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    get:
+      tags: [group]
+      summary: 组详情
+      description: 非成员 403，组不存在 404（两者可区分）。真 B 的 assertLeader 消费此端点判定组长。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 组详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/groups/{gid}/settings:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    put:
+      tags: [group]
+      summary: 改组设置（组长 only）
+      description: |
+        可改 `joinNeedConfirm / course / name / memberLimit`。
+        `memberLimit` 须为 ≥当前人数 且 ≤30 的整数；`name` 去空白后不得为空。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型组设置弹窗而发明
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                course: { type: string, nullable: true }
+                memberLimit: { type: integer, minimum: 1, maximum: 30 }
+                joinNeedConfirm: { type: boolean }
+      responses:
+        '200':
+          description: 更新后的设置
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, memberLimit, joinNeedConfirm]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  course: { type: string, nullable: true }
+                  memberLimit: { type: integer }
+                  joinNeedConfirm: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/groups/{gid}/invites:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    post:
+      tags: [group]
+      summary: 生成邀请码（组长 only）
+      description: |
+        6 位大写码，有效期 7 天。**生成新码即作废旧码**（A 原型成员页文案如此承诺）。
+        不写 Event：冻结 18 类无 invite_create，按裁定丢弃并登记会签。
+        组不存在与非组长同为 403。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '201':
+          description: 新邀请码
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      tags: [group]
+      summary: 邀请码列表（成员可读）
+      description: 只返回 active 且未过期的码。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 只定义 POST invites；列表与轮换读取面为本轮发明
+      responses:
+        '200':
+          description: 邀请码列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites:
+                    type: array
+                    items: { $ref: '#/components/schemas/Invite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/invites/{code}/join:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [group]
+      summary: 凭邀请码加入
+      description: |
+        免确认组：直接入组并写 `member_join`（objectRef.kind=group，assignmentId=null）。
+        需确认组：登记 pending 申请，返回 202，不入组、不写事件。
+        判定顺序：码失效/不存在 404 → 已是成员 409 → 满员 409 → 免确认 200 / 需确认 202。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 已入组
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [joined, groupId]
+                properties:
+                  joined: { type: boolean }
+                  groupId: { type: string }
+        '202':
+          description: 待组长确认
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupId, status]
+                properties:
+                  groupId: { type: string }
+                  status: { type: string, enum: [pending_leader_approval] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/groups/{gid}/join-requests/{uid}/approve:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+      - { $ref: '#/components/parameters/uid' }
+    post:
+      tags: [group]
+      summary: 批准入组申请（组长 only）
+      description: 成功后写 `member_join`（actorId 为被批准人）。无 pending 申请 404；满员 409。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: |
+        A-PRD F2 有「加入默认需组长确认」的功能要求，但 §5.1 未定义批准端点。
+        会签清单 §2 原列 14 条时漏计此条，本轮补标（第 15 条）。
+      responses:
+        '200':
+          description: 已批准
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoinRequestDecision' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/groups/{gid}/join-requests/{uid}/deny:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+      - { $ref: '#/components/parameters/uid' }
+    post:
+      tags: [group]
+      summary: 拒绝入组申请（组长 only）
+      description: 不写 Event（冻结 18 类无对应类型）。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型拒绝按钮而发明
+      responses:
+        '200':
+          description: 已拒绝
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JoinRequestDecision' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/groups/{gid}/join-requests:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    get:
+      tags: [group]
+      summary: 待审申请列表（组长视角）
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型待审列表而发明
+      responses:
+        '200':
+          description: 待审列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests:
+                    type: array
+                    items: { $ref: '#/components/schemas/JoinRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/join-requests/mine:
+    get:
+      tags: [group]
+      summary: 我的待审申请（首页「待组长确认」卡片）
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型首页卡片而发明
+      responses:
+        '200':
+          description: 本人 pending 申请
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: '#/components/schemas/JoinRequest' }
+                        - type: object
+                          properties:
+                            groupName: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/groups/{gid}/exit:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    post:
+      tags: [group]
+      summary: 自愿退组
+      description: 写 `member_exit`。组长退组 409「须先转让才能退组」（A-PRD F2 要求留痕与转让）。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD F2 有功能要求但 §5.1 未定义端点；为 A 原型退组按钮而发明
+      responses:
+        '200':
+          description: 已退组
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupId, userId, exited]
+                properties:
+                  groupId: { type: string }
+                  userId: { type: string }
+                  exited: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/groups/{gid}/transfer:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    post:
+      tags: [group]
+      summary: 转让组长（组长 only）
+      description: |
+        `toUserId` 须为组内成员；转给自己 409「已是组长」。
+        **不入账**：冻结 18 类无 group_transfer，与 group_create/invite_create 同批会签。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD F2 有「组长可转让」功能要求但 §5.1 未定义端点
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toUserId]
+              properties:
+                toUserId: { type: string }
+      responses:
+        '200':
+          description: 已转让
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupId, ownerId]
+                properties:
+                  groupId: { type: string }
+                  ownerId: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/groups/{gid}/assignments:
+    parameters:
+      - { $ref: '#/components/parameters/gid' }
+    get:
+      tags: [group]
+      summary: 组下作业列表（成员可读）
+      description: A 原型由组进入作业的唯一入口。作业数据记录系统归属（A 还是 B）待 v1.1 会签。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；缺它则原型渲染不出任何作业
+      responses:
+        '200':
+          description: 作业列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignments]
+                properties:
+                  assignments:
+                    type: array
+                    items: { $ref: '#/components/schemas/AssignmentRef' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/assignments/ai-draft:
+    post:
+      tags: [draft]
+      summary: AI 拆解作业要求为 TaskDraft v1
+      description: |
+        链路：脱敏 → 缓存命中判定 → 成本上限 → provider 两次尝试 → TaskDraft 校验 → 失败降级模板。
+        **降级/缓存标记走响应头**（TaskDraft v1 顶层 additionalProperties=false，body 保持纯契约形状）。
+
+        mock 与真 B 的差异（未收敛）：
+        - 真 B 校验 `requirementsText` 必为字符串且 ≤5000 字、`finalDdl` 必须晚于当前时间、
+          `memberCount` 为 1–8 整数；mock 只校验 finalDdl/groupId 必填。
+        - 真 B 要求**组长**（经 A 组详情判定）；mock 只要求组成员。
+        - 真 B 每 uid 每分钟 5 次限频 → 429；mock 无限频。
+        - 真 B 会返回降级头与 502（A 不可用）；mock 恒 201 且无降级头。
+        - 真 B 的 A 组详情 403 映射为 403（本轮修复，原为 502）。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requirementsText, finalDdl, groupId]
+              properties:
+                requirementsText: { type: string, maxLength: 5000 }
+                finalDdl: { type: string, format: date-time }
+                groupId: { type: string }
+                memberCount: { type: integer, minimum: 1, maximum: 8 }
+      responses:
+        '201':
+          description: 拆解产物（可能是降级模板，见响应头）
+          headers:
+            x-ai-degraded:
+              description: 仅真 B；降级时为 '1'
+              schema: { type: string, enum: ['1'] }
+            x-ai-degraded-reason:
+              description: 仅真 B；timeout | invalid-output | provider-error | cost-cap
+              schema: { type: string, enum: [timeout, invalid-output, provider-error, cost-cap] }
+            x-ai-cached:
+              description: 仅真 B；命中缓存时为 '1'（draftId 仍重发新值）
+              schema: { type: string, enum: ['1'] }
+          content:
+            application/json:
+              schema: { $ref: './taskdraft.v1.schema.json' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: 仅真 B；每分钟超过 5 次
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+  /v1/templates:
+    get:
+      tags: [draft]
+      summary: 可用模板目录
+      description: 四类：pre / report / code / video。真 B 只返回 enabled=1 的行。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      responses:
+        '200':
+          description: 模板目录
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [templates]
+                properties:
+                  templates:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, category, name]
+                      properties:
+                        id: { type: string }
+                        category: { type: string, enum: [pre, report, code, video] }
+                        name: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/assignments/from-template:
+    post:
+      tags: [draft]
+      summary: 按模板生成 TaskDraft（不入库为作业）
+      description: |
+        产物落 drafts 表（status=preview），需再调 commit 才建作业。
+        mock 与真 B 差异：真 B 要求**组长**且 A 组详情 403 → 403、其他非 200 → 502；
+        mock 只要求组成员，且组不存在 404。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId, finalDdl, groupId]
+              properties:
+                templateId: { type: string }
+                finalDdl: { type: string, format: date-time }
+                groupId: { type: string }
+                memberCount: { type: integer, minimum: 1, maximum: 8 }
+                title: { type: string }
+                requirementsText: { type: string }
+      responses:
+        '201':
+          description: 模板草稿
+          content:
+            application/json:
+              schema: { $ref: './taskdraft.v1.schema.json' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+  /v1/drafts/{did}:
+    parameters:
+      - { $ref: '#/components/parameters/did' }
+    get:
+      tags: [draft]
+      summary: 读草稿
+      description: |
+        真 B：创建者 / 组长 / 组员可读（组员只读）。mock：组成员可读。
+        此端点真 B 早已存在，B/C 两版 mock 都漏了，合并时保真回填（非发明）。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      responses:
+        '200':
+          description: 草稿载荷
+          content:
+            application/json:
+              schema: { $ref: './taskdraft.v1.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [draft]
+      summary: 编辑草稿（确认页改任务/DDL）
+      description: |
+        `draftId` 由服务端强制回填为路径参数，客户端传值被忽略。
+        mock 与真 B 差异：真 B 校验 TaskDraft（失败 400 带 errors）、要求 preview 状态（否则 409）、
+        只允许创建者或组长编辑；mock 不校验形状、不校验状态、不校验权限（仅需登录）。
+        e2e 的逾期/在途场景由本端点显式构造，不依赖拆解实现的偏移巧合。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './taskdraft.v1.schema.json' }
+      responses:
+        '200':
+          description: 编辑后的草稿
+          content:
+            application/json:
+              schema: { $ref: './taskdraft.v1.schema.json' }
+        '400':
+          description: 形状/校验失败（真 B 带 errors 数组）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationErrors' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/drafts/{did}/commit:
+    parameters:
+      - { $ref: '#/components/parameters/did' }
+    post:
+      tags: [draft]
+      summary: 草稿落库为作业 + 批量建任务
+      description: |
+        真 B：aid 由 draftId 确定性派生（`a-${draftId}`），重试复用同一 aid；
+        先查 A 是否已有任务，有则跳过 fromDraft（fromDraft 无幂等键，decisions #10）；
+        A 不可用或 fromDraft 失败 → 本地回滚 + 502，draft 保持 preview 可重试。
+        里程碑留在 B 自己的 sqlite，同时随 draft 推给 A 留存一份（C 的报告读 A 副本）。
+        mock 与真 B 差异：mock 的 aid 是随机 uuid、响应多一个 `taskCount`、不校验权限与形状、无 502。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      responses:
+        '201':
+          description: 已落库
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId]
+                properties:
+                  assignmentId: { type: string }
+                  taskCount: { type: integer, description: 仅 mock 返回 }
+        '400':
+          description: TaskDraft 校验失败（真 B）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationErrors' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+  /v1/assignments/{aid}/milestones:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    get:
+      tags: [draft]
+      summary: 作业的里程碑（DDL 倒推产物）
+      description: |
+        读取形状 `{id,assignmentId,name,due,sort}`；TaskDraft 载荷侧仍是 schema 的 `{name,due}`。
+        mock 对不存在作业与非成员同为 403；真 B 不校验权限，未知 aid 返回空数组。
+        里程碑达成状态无事件源（冻结 18 类无 milestone_done），报告里 `achieved` 恒 null。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      responses:
+        '200':
+          description: 里程碑列表（按 sort 升序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [milestones]
+                properties:
+                  milestones:
+                    type: array
+                    items: { $ref: '#/components/schemas/Milestone' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/assignments/{aid}/board:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    get:
+      tags: [board]
+      summary: 四列看板
+      description: |
+        列恒为 todo / in_progress / review / done。未认领任务 assigneeId=null。
+        `deliverableVersion` 为版本链最大版本号，无交付物时 0。
+        作业不存在与非成员同为 403（与任务详情端点的 404/403 可区分口径不一致，待会签）。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 看板
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId, columns]
+                properties:
+                  assignmentId: { type: string }
+                  columns:
+                    type: object
+                    required: [todo, in_progress, review, done]
+                    properties:
+                      todo: { type: array, items: { $ref: '#/components/schemas/BoardCard' } }
+                      in_progress: { type: array, items: { $ref: '#/components/schemas/BoardCard' } }
+                      review: { type: array, items: { $ref: '#/components/schemas/BoardCard' } }
+                      done: { type: array, items: { $ref: '#/components/schemas/BoardCard' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/tasks/{tid}:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    get:
+      tags: [board]
+      summary: 任务详情
+      description: 看板卡片之外的 description / deliverableSpec / dependsOn（任务 id 数组）/ rejectReason。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 未定义；为 A 原型任务详情弹窗而发明
+      responses:
+        '200':
+          description: 任务全字段
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tasks/{tid}/claim:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 一键认领（认领制，禁止预指派）
+      description: |
+        写 `claim`，payload `{from:null,to:uid}`。已被他人认领 409；自己重复认领幂等 200 且不重复入账。
+        x-prd-gap：A-PRD F9 要求「乐观锁防并发抢单」，mock 以先查后写实现，无版本号乐观锁。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-prd-gap: 无乐观锁版本号，并发抢单靠单进程串行化
+      responses:
+        '200':
+          description: 认领结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskMutation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/tasks/{tid}/start:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 开始任务（仅负责人）
+      description: 状态置 in_progress，写 `start`。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 状态迁移结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskStatusResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tasks/{tid}/deliverables:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 挂交付物链接（版本自增，版本链不可删）
+      description: |
+        只存链接+标题+类型+提交人+版本号，不存文件。写 `deliverable_update`，payload `{version,url}`。
+        x-prd-gap：A-PRD F12 要求「非法 URL（非 http/https）拒绝」，mock 未校验；
+        且 mock 不校验提交者是否组成员（仅需登录）。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-prd-gap: URL 合法性未校验；提交者成员身份未校验
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, description: 腾讯文档/飞书/Google Docs/网盘/GitHub/其他 URL }
+                title: { type: string }
+                type: { type: string }
+      responses:
+        '201':
+          description: 新版本交付物
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Deliverable' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    get:
+      tags: [board]
+      summary: 交付物版本链
+      description: mock 不校验成员身份（仅需登录）。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 版本链（提交顺序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliverables]
+                properties:
+                  deliverables:
+                    type: array
+                    items: { $ref: '#/components/schemas/Deliverable' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tasks/{tid}/submit:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 提交审核
+      description: 状态置 review，写 `submit`。mock 不校验提交者身份（仅需登录）。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 状态迁移结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskStatusResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tasks/{tid}/reviews:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 组内审核（通过 / 打回）
+      description: |
+        approve → done，写 `approve`；reject → in_progress 且 rejected=true，写 `reject`（payload.reason）。
+        **打回必须附理由**，否则 400。完成时刻由 C 从账本最后一次 approve 的 occurredAt 派生。
+        mock 不校验审核人是否组长（A-PRD F21 默认组长）。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-prd-gap: 审核人身份未校验
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, reject] }
+                reason: { type: string, description: action=reject 时必填 }
+      responses:
+        '200':
+          description: 审核结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, rejected]
+                properties:
+                  id: { type: string }
+                  status: { type: string, enum: [todo, in_progress, review, done] }
+                  rejected: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tasks/{tid}/reassign:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 转派（组长或当前负责人）
+      description: 直接生效并写 `reassign`，payload `{from,to}`。
+      x-owner: A
+      x-implemented-by: [mock]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { type: string, description: 目标 uid；词表与内部端点的 assignee 差异待会签 }
+      responses:
+        '200':
+          description: 转派结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskMutation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/tasks/{tid}/comments:
+    parameters:
+      - { $ref: '#/components/parameters/tid' }
+    post:
+      tags: [board]
+      summary: 发评论（支持 @成员）
+      description: |
+        写 `comment`，objectRef.kind=comment，payload `{taskId,mentions}`。
+        @解析结果交 B 触发提醒（真 B 经 `POST /v1/internal/notify`）。评论不可删除。
+      x-owner: A
+      x-implemented-by: [mock]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                mentions: { type: array, items: { type: string }, default: [] }
+      responses:
+        '201':
+          description: 新评论
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    get:
+      tags: [board]
+      summary: 评论列表
+      description: mock 不校验成员身份（仅需登录）。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 评论列表（提交顺序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [comments]
+                properties:
+                  comments:
+                    type: array
+                    items: { $ref: '#/components/schemas/Comment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/comments/{cid}:
+    parameters:
+      - { $ref: '#/components/parameters/cid' }
+    put:
+      tags: [board]
+      summary: 编辑评论（作者本人、5 分钟内、只一次）
+      description: |
+        判定顺序：不存在 404 → 非作者 403 → 已编辑 409 → 超 5 分钟 409 → body 空 400。
+        **不入账**：冻结 18 类无 comment_edit，复用 comment 会污染 C 的时间线计数，按裁定登记会签。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD F13 有「5 分钟内可编辑」功能要求但 §5.1 未定义端点
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                mentions: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: 编辑后的评论（带 editedAt）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/assignments/{aid}/final-submissions:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    post:
+      tags: [board]
+      summary: 统一提交（生成不可变快照）
+      description: |
+        前置：全部任务 done；否则必须传 `forceReason`（400 拒绝无理由强制提交）。
+        快照含全部任务的最新交付物 + 状态 + 时间戳 + 提交人，写 `final_submit`（payload.taskCount）。
+        快照生成后任何修改不影响快照内容。
+      x-owner: A
+      x-implemented-by: [mock]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                forceReason: { type: string, description: 仍有未完成任务时必填 }
+      responses:
+        '201':
+          description: 不可变快照
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinalSnapshot' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      tags: [board]
+      summary: 统一提交历史（全量快照）
+      description: |
+        成员可读；作业不存在与越权同为 403（与任务详情端点口径不一致，待会签）。
+        latest 仍单独一条端点，本端点返回历史全量。
+      x-owner: A
+      x-implemented-by: [mock]
+      x-provisional: true
+      x-provisional-reason: A-PRD §5.1 只定义 POST 与 GET …/latest；历史列表为 A 原型快照校验而发明
+      responses:
+        '200':
+          description: 历史快照（提交顺序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [submissions]
+                properties:
+                  submissions:
+                    type: array
+                    items: { $ref: '#/components/schemas/FinalSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/assignments/{aid}/final-submissions/latest:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    get:
+      tags: [board]
+      summary: 最新统一提交快照
+      description: 未提交过 404；作业不存在与越权同为 403。互评窗口开启以此为前置。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 最新快照
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinalSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/events:
+    post:
+      tags: [evidence]
+      summary: writeEvent 入账入口（幂等）
+      description: |
+        **免鉴权 ingress**（服务间调用，真 B 以无 token 方式写入）。
+        同 eventId 重复提交返回 200 `{duplicate:true}`，不产生第二条记录。
+        x-prd-gap：mock 不校验 type 是否在冻结 18 类内、也不校验载荷形状；
+        真 C 落地时须在入口按 event.v1.schema.json 校验。
+      x-owner: C
+      x-implemented-by: [mock]
+      x-prd-gap: 入口未按 Event schema 校验
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './event.v1.schema.json' }
+      responses:
+        '200':
+          description: 重复入账（幂等命中）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventAck' }
+        '201':
+          description: 新入账
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventAck' }
+  /v1/assignments/{aid}/timeline:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+      - name: memberId
+        in: query
+        required: false
+        description: 个人时间线；匹配 actorId 或 objectRef 所指任务的 assigneeId
+        schema: { type: string }
+      - name: type
+        in: query
+        required: false
+        schema: { type: string }
+    get:
+      tags: [evidence]
+      summary: 作业级 / 成员级时间线
+      description: |
+        按 occurredAt 倒序（同时刻以入账序兜底）。组级事件（assignmentId=null）并入同组作业时间线。
+        个人时间线不得泄漏他人事件。**互评事件只留不透明 review id，不含 revieweeId 与分数**。
+      x-owner: C
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 时间线
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId, total, events]
+                properties:
+                  assignmentId: { type: string }
+                  total: { type: integer }
+                  events:
+                    type: array
+                    items: { $ref: './event.v1.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/assignments/{aid}/stats:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    get:
+      tags: [evidence]
+      summary: 完成率与逾期统计（六指标分列，不得混用）
+      description: |
+        完成时刻一律从账本派生（任务最后一次 `approve` 的 occurredAt），不新增可变 completedAt 字段。
+        - completionRate = 已完成/总任务（含迟完成，进度可视化）
+        - onTimeCompletionRate = DDL 前完成/总任务（父 PRD 北极星）
+        - overdueTasks = 仅在途逾期；everOverdueTasks/overdueRate = 在途逾期 + 迟完成
+        账本无完成时刻的 done 任务不计入按时/迟交（由对账测试兜出）。
+      x-owner: C
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 统计
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/assignments/{aid}/review-windows:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    post:
+      tags: [evidence]
+      summary: 开启互评窗口（组长 only，须已统一提交）
+      description: |
+        默认 72h，可传 durationHours。复用冻结类型 `review_submit`，以 payload.kind=window_open 区分子类。
+        未统一提交 409；重复开启 409。
+      x-owner: C
+      x-implemented-by: [mock]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                durationHours: { type: number, default: 72 }
+      responses:
+        '201':
+          description: 窗口
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewWindow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/assignments/{aid}/review-evidence:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+      - name: memberId
+        in: query
+        required: true
+        description: 被评人；不得为自己（自评属 P2），须为组成员
+        schema: { type: string }
+    get:
+      tags: [evidence]
+      summary: 加载被评人证据面板并签发一次性 evidenceToken
+      description: |
+        「无证据不可评分」在接口层成立：令牌绑定 (窗口, 评分人, 被评人)，
+        没加载面板就拿不到令牌，拿别人的令牌也过不了校验，不靠客户端自报。
+        窗口未开启/已截止 409；自评 400；被评人非成员 404。
+      x-owner: C
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 证据面板 + 令牌
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId, windowId, memberId, evidenceToken, panelLoadedAt, panel]
+                properties:
+                  assignmentId: { type: string }
+                  windowId: { type: string }
+                  memberId: { type: string }
+                  evidenceToken: { type: string }
+                  panelLoadedAt: { type: string, format: date-time }
+                  panel: { $ref: '#/components/schemas/EvidencePanel' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/assignments/{aid}/reviews:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    post:
+      tags: [evidence]
+      summary: 提交互评（四维 1–5 分 + 必填评语 ≤200 字）
+      description: |
+        前置链：窗口开启且未截止 → 非自评 → 被评人是成员 → calibrated=true（首次须完成校准示例）
+        → evidenceToken 有效且未用且匹配 → 四维整数 1–5 → 评语非空 ≤200 字 → 同窗口对同一人未评过。
+        提交后不可修改（可另调 addendum 追加留痕）。写 `review_submit`（payload.kind=score），
+        **事件里绝不写 revieweeId 或分数**（时间线全组可读）。
+      x-owner: C
+      x-implemented-by: [mock]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revieweeId, scores, comment, calibrated, evidenceToken]
+              properties:
+                revieweeId: { type: string }
+                scores: { $ref: '#/components/schemas/ReviewScores' }
+                comment: { type: string, maxLength: 200 }
+                calibrated: { type: boolean, enum: [true] }
+                evidenceToken: { type: string }
+      responses:
+        '201':
+          description: 已提交（不回显分数与评语）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, windowId, revieweeId, submittedAt]
+                properties:
+                  id: { type: string }
+                  windowId: { type: string }
+                  revieweeId: { type: string }
+                  submittedAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/assignments/{aid}/reviews/summary:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    get:
+      tags: [evidence]
+      summary: 匿名互评汇总 + 覆盖率
+      description: |
+        只出被评人的维度均值与份数；reviewerId、逐条分数、评语原文一律不出接口。
+        覆盖率分母 = n×(n−1)（全员互评、不含自评）；单人组 expected=0 时 coverageRate 取 0 而非 NaN。
+      x-owner: C
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 匿名汇总
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId, windowId, state, anonymous, expectedCount, submittedCount, coverageRate, summary]
+                properties:
+                  assignmentId: { type: string }
+                  windowId: { type: string }
+                  state: { type: string, enum: [open, closed] }
+                  anonymous: { type: boolean, enum: [true] }
+                  expectedCount: { type: integer }
+                  submittedCount: { type: integer }
+                  coverageRate: { type: number }
+                  summary:
+                    type: array
+                    items: { $ref: '#/components/schemas/AnonymousReviewRow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/reviews/{rid}/addendum:
+    parameters:
+      - { $ref: '#/components/parameters/rid' }
+    post:
+      tags: [evidence]
+      summary: 追加补充说明（提交者本人，留痕不改分）
+      description: |
+        v1 冻结表未定义追加端点，形状按「提交后不可改、可追加留痕」推导，待 v1.1 会签。
+        写 `review_submit`（payload.kind=addendum）。
+      x-owner: C
+      x-implemented-by: [mock]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        '201':
+          description: 追加后的留痕列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reviewId, addendum]
+                properties:
+                  reviewId: { type: string }
+                  addendum:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, text, createdAt]
+                      properties:
+                        id: { type: string }
+                        text: { type: string }
+                        createdAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/reports/{aid}/export:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    post:
+      tags: [evidence]
+      summary: 导出贡献参考报告（PDF + 长图）
+      description: |
+        **先入账再算 stats**：否则报告里的 eventCount 不含自身这条导出事件，与随后读到的 /stats 对不上。
+        写 `report_export`（objectRef.kind=contribution_report，payload.formats=['pdf','image']）。
+        只呈现客观事实，不算综合贡献分；里程碑 achieved 恒 null（无事件源）；disputes 恒 []（申诉未实现）。
+        报告保留历史快照，导出不覆盖。链接 7 天过期。
+        mock 不做真渲染：`mock-artifact://` 占位协议，真 PDF/长图与 ≤10s 只能在 staging 验。
+      x-owner: C
+      x-implemented-by: [mock]
+      responses:
+        '201':
+          description: 报告记录
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/internal/assignments/{aid}/tasks-full:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    get:
+      tags: [internal]
+      summary: 任务全量 + 交付物 + 审核轨迹（供 C 证据面板/报告）
+      description: |
+        A-PRD §5.1 与 C-PRD §5.1 均声明的跨线依赖。
+        **internal 路径但仍需鉴权 + 组成员**：C 的越权测试要求它对组外成员 403，故不在免鉴权白名单内。
+      x-owner: A
+      x-implemented-by: [mock]
+      responses:
+        '200':
+          description: 任务全量
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId, tasks]
+                properties:
+                  assignmentId: { type: string }
+                  tasks:
+                    type: array
+                    items: { $ref: '#/components/schemas/TaskFull' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/internal/assignments/{aid}/tasks:fromDraft:
+    parameters:
+      - { $ref: '#/components/parameters/aid' }
+    post:
+      tags: [internal]
+      summary: 消费 TaskDraft v1 批量建任务（B → A，免鉴权）
+      description: |
+        真 A 直读 B-owned assignments 表；mock 无共享库，故 B 随包装层显式传 `groupId`
+        以登记 assignment→group 映射（契约补充 v1.1 待会签，decisions #10）。
+        里程碑随 draft 一并留存于 A（C 的报告读 A 副本）。
+        **无幂等键**：不校验 assignment 是否已存在，重复调用会重复建任务；
+        真 B 在 commit 侧先查 tasks 再决定是否调用以规避。
+      x-owner: A
+      x-implemented-by: [mock]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [draft]
+              properties:
+                draft: { $ref: './taskdraft.v1.schema.json' }
+                groupId: { type: string, description: 跨服务部署时必传；B 单测可不传 }
+      responses:
+        '201':
+          description: 已建任务数
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [created]
+                properties:
+                  created: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/internal/tasks:
+    get:
+      tags: [internal]
+      summary: 任务扫描（供 B 提醒与黄牌，免鉴权）
+      description: |
+        **词表差异**：本端点出参用 `assignee`（真 B 的 dispatcher/yellowcard 读 t.assignee），
+        A 侧存储与其余端点用 `assigneeId`。各端点按各自消费方词表出参，差异登记 v1.1 会签，不加兼容 shim。
+      x-owner: A
+      x-implemented-by: [mock]
+      security: []
+      parameters:
+        - name: assignmentId
+          in: query
+          required: false
+          schema: { type: string }
+        - name: dueBefore
+          in: query
+          required: false
+          description: 严格小于该时刻（ISO-8601）
+          schema: { type: string, format: date-time }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [todo, in_progress, review, done] }
+      responses:
+        '200':
+          description: 任务集
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks]
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: '#/components/schemas/InternalTask' }
+  /v1/internal/schedule/refresh:
+    post:
+      tags: [internal]
+      summary: DDL/状态变更后重算提醒队列（A → B，免鉴权）
+      description: |
+        mock 为 no-op，恒 200 `{ok:true}`。
+        真 B：`assignmentId` 必填且须存在；把 pending/failed 标 cancelled 后重算，
+        同 dedup_key 的 cancelled 行复活，sent 行保持（该边界已提醒过）。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assignmentId: { type: string, description: 真 B 必填；mock 忽略 }
+      responses:
+        '200':
+          description: 重算结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+                  cancelled: { type: integer, description: 仅真 B }
+                  created: { type: integer, description: 仅真 B }
+                  pending: { type: integer, description: 仅真 B }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/internal/notify:
+    post:
+      tags: [internal]
+      summary: 评论 @ / 打回通知（A → B，免鉴权）
+      description: |
+        mock 为 no-op，恒 200 `{ok:true}`。
+        真 B：eventId + kind(mention|reject) + recipients(非空 uid 数组) + assignmentId 必填；
+        按 (event_id,user_id) 唯一索引判重，重复调用 created=0。text 截断至 500 字。
+      x-owner: B
+      x-implemented-by: [mock, b-time]
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                eventId: { type: string, description: 真 B 必填，判重键 }
+                kind: { type: string, enum: [mention, reject] }
+                recipients: { type: array, items: { type: string }, minItems: 1 }
+                assignmentId: { type: string }
+                taskId: { type: string, description: 有则通知指向任务，否则指向作业 }
+                actor: { type: string }
+                text: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: 通知结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+                  created: { type: integer, description: 仅真 B；实际新增条数（判重后） }
+        '400':
+          description: 真 B 校验失败（带 errors 明细）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationErrors' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/internal/stats/overdue:
+    get:
+      tags: [internal]
+      summary: 成员逾期统计（供 B 黄牌规则，免鉴权）
+      description: |
+        合并时取 B 版实现（C 侧原为 501，不取 B 会让混合模式下 B 的黄牌 gate2 红）。
+        **streak 语义 = 该成员当前逾期任务数**（decisions #22）；
+        C-PRD §5.1 写的是「成员连续逾期次数」，是否改口径待三线确认。
+        只统计已认领、未 done、due 已过的任务。
+      x-owner: C
+      x-implemented-by: [mock]
+      security: []
+      parameters:
+        - name: assignmentId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 逾期成员
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      required: [memberId, streak]
+                      properties:
+                        memberId: { type: string }
+                        streak: { type: integer }
+  /v1/internal/reminder-jobs:
+    get:
+      tags: [internal]
+      summary: 提醒队列观测（gate2 断言与运维排查）
+      description: 真 B 独占；纯 mock 模式下对应 e2e 条件 skip。按 fire_at, object_kind, object_id 排序。
+      x-owner: B
+      x-implemented-by: [b-time]
+      security: []
+      parameters:
+        - name: assignmentId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, sent, failed, cancelled] }
+      responses:
+        '200':
+          description: 队列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReminderJob' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/internal/yellow-cards:
+    get:
+      tags: [internal]
+      summary: 黄牌观测
+      description: 真 B 独占。按 member_id, streak 排序。黄牌同时写 `yellow_card` 事件（actorId='system'）。
+      x-owner: B
+      x-implemented-by: [b-time]
+      security: []
+      parameters:
+        - name: assignmentId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 黄牌
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cards]
+                properties:
+                  cards:
+                    type: array
+                    items: { $ref: '#/components/schemas/YellowCard' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/internal/subscribe-quota:
+    get:
+      tags: [internal]
+      summary: 指定用户的微信订阅配额观测
+      description: 真 B 独占。无记录时 remaining=0、collectedAt/openid 为 null。
+      x-owner: B
+      x-implemented-by: [b-time]
+      security: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 配额
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [quota]
+                properties:
+                  quota:
+                    type: object
+                    required: [userId, remaining]
+                    properties:
+                      userId: { type: string }
+                      remaining: { type: integer }
+                      collectedAt: { type: string, nullable: true }
+                      openid: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/internal/schedule/tick:
+    post:
+      tags: [internal]
+      summary: 手动补扫（幂等，gate2 确定性触发）
+      description: |
+        真 B 独占。物化提醒 job → 下发 pending → 黄牌扫描，不等 60s 定时 tick。
+        dispatched / yellowcards 在无对应服务时为 null。
+      x-owner: B
+      x-implemented-by: [b-time]
+      security: []
+      responses:
+        '200':
+          description: 补扫结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, at, created]
+                properties:
+                  ok: { type: boolean }
+                  at: { type: string, format: date-time }
+                  created: { type: integer }
+                  dispatched:
+                    type: object
+                    nullable: true
+                    properties:
+                      sent: { type: integer }
+                      failed: { type: integer }
+                      pending: { type: integer }
+                  yellowcards:
+                    type: object
+                    nullable: true
+                    properties:
+                      created: { type: integer }
+                      events: { type: integer }
+                      leaderNotes: { type: integer }
+                      skipped: { type: integer }
+  /v1/internal/metrics:
+    get:
+      tags: [ops]
+      summary: B 线内指标（全部由 owned 表现算，无额外上报链路）
+      description: |
+        真 B 独占。触发误差 = sent_at − max(fire_at, created_at)：补扫 job 以物化时刻为基准，
+        否则历史积压会被误算成调度抖动（PRD 验收口径是队列调度误差 <5min）。
+        分母为 0 时比率取 null（不是 0）。
+      x-owner: B
+      x-implemented-by: [b-time]
+      security: []
+      responses:
+        '200':
+          description: 指标快照
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Metrics' }
+  /v1/notifications:
+    get:
+      tags: [notify]
+      summary: 我的站内通知（最近 100 条，倒序）
+      description: 真 B 独占。type ∈ reminder / yellow_card_self / yellow_card_leader / mention / reject。
+      x-owner: B
+      x-implemented-by: [b-time]
+      parameters:
+        - name: unread
+          in: query
+          required: false
+          description: 传 '1' 只返回未读
+          schema: { type: string, enum: ['1'] }
+      responses:
+        '200':
+          description: 通知列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notifications]
+                properties:
+                  notifications:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/notifications/{nid}/read:
+    parameters:
+      - { $ref: '#/components/parameters/nid' }
+    post:
+      tags: [notify]
+      summary: 标记已读（幂等）
+      description: 真 B 独占。非本人通知与不存在同为 404（不泄漏他人通知是否存在）。已读时保留原 read_at。
+      x-owner: B
+      x-implemented-by: [b-time]
+      responses:
+        '200':
+          description: 通知（带 read_at）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/subscriptions/collect:
+    post:
+      tags: [notify]
+      summary: 上报微信订阅授权次数
+      description: |
+        真 B 独占。小程序壳在 wx.requestSubscribeMessage 授权回调后上报；H5 无此能力（R3），端点先建。
+        count 缺省 1，须为 1..3 整数；累加到 remaining。openid 可选（≤128 非空字符串）。
+      x-owner: B
+      x-implemented-by: [b-time]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                count: { type: integer, minimum: 1, maximum: 3, default: 1 }
+                openid: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: 累加后的配额
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, remaining, collectedAt]
+                properties:
+                  ok: { type: boolean }
+                  remaining: { type: integer }
+                  collectedAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/subscriptions/quota:
+    get:
+      tags: [notify]
+      summary: 我的订阅配额
+      description: 真 B 独占。`wechatEnabled` 取自 WECHAT_ENABLED 环境变量，供前端决定是否展示授权入口。
+      x-owner: B
+      x-implemented-by: [b-time]
+      responses:
+        '200':
+          description: 配额
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [remaining, wechatEnabled]
+                properties:
+                  remaining: { type: integer }
+                  collectedAt: { type: string, nullable: true }
+                  wechatEnabled: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /healthz:
+    get:
+      tags: [ops]
+      summary: 健康检查（public）
+      description: 真 B 独占；mock 无此端点（探活用 public 的 GET /v1/users）。
+      x-owner: B
+      x-implemented-by: [b-time]
+      security: []
+      responses:
+        '200':
+          description: 存活
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service]
+                properties:
+                  ok: { type: boolean }
+                  service: { type: string, enum: [b-time] }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        `Authorization: Bearer <token>`。mock 会话为 `tok-${code}`；
+        真 B 由 SESSION_MODE 决定（mock 会话 / jwt），internal 与 public 端点不校验。
+  parameters:
+    gid:
+      name: gid
+      in: path
+      required: true
+      schema: { type: string }
+    uid:
+      name: uid
+      in: path
+      required: true
+      schema: { type: string }
+    aid:
+      name: aid
+      in: path
+      required: true
+      description: 真 B 的 aid 由 draftId 派生（`a-${draftId}`）；mock 为随机 uuid
+      schema: { type: string }
+    tid:
+      name: tid
+      in: path
+      required: true
+      schema: { type: string }
+    cid:
+      name: cid
+      in: path
+      required: true
+      schema: { type: string }
+    did:
+      name: did
+      in: path
+      required: true
+      schema: { type: string }
+    rid:
+      name: rid
+      in: path
+      required: true
+      schema: { type: string }
+    nid:
+      name: nid
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: 参数或载荷校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: 缺失或无效会话
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 越权（非成员 / 非组长 / 非作者 / 非负责人）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 对象不存在
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: 状态冲突（已被认领 / 满员 / 已编辑 / 窗口未开或已截止 / 重复提交等）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadGateway:
+      description: 上游（A 服务）不可用或返回非预期状态；本地已回滚，可重试
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    ValidationErrors:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        errors: { type: array, items: { type: string } }
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+    Session:
+      type: object
+      required: [token, userId]
+      properties:
+        token: { type: string }
+        userId: { type: string }
+    Profile:
+      type: object
+      required: [id, name, color]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        color: { type: string }
+        email: { type: string, nullable: true }
+        wxOpenid: { type: string, nullable: true }
+    GroupSummary:
+      type: object
+      required: [id, name, ownerId, memberLimit, joinNeedConfirm, members, taskCount]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        course: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        ownerId: { type: string }
+        memberLimit: { type: integer }
+        joinNeedConfirm: { type: boolean }
+        members: { type: array, items: { type: string } }
+        taskCount: { type: integer }
+    GroupDetail:
+      type: object
+      required: [id, name, ownerId, members, memberLimit, joinNeedConfirm]
+      description: 真 B 的 assertLeader 只依赖 ownerId 与 members；members 为 uid 数组（无昵称）
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ownerId: { type: string }
+        members: { type: array, items: { type: string } }
+        course: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        memberLimit: { type: integer }
+        joinNeedConfirm: { type: boolean }
+    Invite:
+      type: object
+      required: [code, groupId, expiresAt, active]
+      properties:
+        code: { type: string }
+        groupId: { type: string }
+        expiresAt: { type: string, format: date-time }
+        active: { type: boolean }
+        createdBy: { type: string }
+    JoinRequest:
+      type: object
+      required: [groupId, userId]
+      properties:
+        groupId: { type: string }
+        userId: { type: string }
+        code: { type: string, nullable: true }
+        ts: { type: string, nullable: true }
+    JoinRequestDecision:
+      type: object
+      required: [groupId, userId, status]
+      properties:
+        groupId: { type: string }
+        userId: { type: string }
+        status: { type: string, enum: [active, denied] }
+    AssignmentRef:
+      type: object
+      required: [id, groupId, title, finalDdl]
+      properties:
+        id: { type: string }
+        groupId: { type: string }
+        title: { type: string }
+        finalDdl: { type: string, format: date-time }
+    Milestone:
+      type: object
+      required: [id, assignmentId, name, due, sort]
+      properties:
+        id: { type: string }
+        assignmentId: { type: string }
+        name: { type: string }
+        due: { type: string, format: date-time }
+        sort: { type: integer }
+    BoardCard:
+      type: object
+      required: [id, title, status, due, estimatedLoad, rejected, deliverableVersion]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        assigneeId: { type: string, nullable: true }
+        due: { type: string, format: date-time }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        estimatedLoad: { type: integer, minimum: 1, maximum: 5 }
+        rejected: { type: boolean }
+        deliverableVersion: { type: integer }
+    TaskDetail:
+      type: object
+      required: [id, assignmentId, key, title, status, due, estimatedLoad, rejected, groupId, description, deliverableSpec, dependsOn]
+      properties:
+        id: { type: string }
+        assignmentId: { type: string }
+        groupId: { type: string }
+        key: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        assigneeId: { type: string, nullable: true }
+        due: { type: string, format: date-time }
+        estimatedLoad: { type: integer }
+        rejected: { type: boolean }
+        deliverables: { type: array, items: { $ref: '#/components/schemas/Deliverable' } }
+        description: { type: string }
+        deliverableSpec: { type: string }
+        dependsOn: { type: array, items: { type: string }, description: 任务 id（草稿里的 key 已在落库时换算） }
+        rejectReason: { type: string, nullable: true }
+    TaskMutation:
+      type: object
+      required: [id, assigneeId, status]
+      properties:
+        id: { type: string }
+        assigneeId: { type: string, nullable: true }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+    TaskStatusResult:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+    Deliverable:
+      type: object
+      required: [id, taskId, taskKey, url, version, submittedBy, createdAt]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        taskKey: { type: string }
+        url: { type: string }
+        title: { type: string }
+        type: { type: string }
+        version: { type: integer }
+        submittedBy: { type: string }
+        createdAt: { type: string, format: date-time }
+    Comment:
+      type: object
+      required: [id, taskId, authorId, body, mentions, createdAt]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        authorId: { type: string }
+        body: { type: string }
+        mentions: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+        editedAt: { type: string, nullable: true }
+    FinalSnapshot:
+      type: object
+      required: [id, assignmentId, groupId, submittedBy, submittedAt, forced, tasks]
+      properties:
+        id: { type: string }
+        assignmentId: { type: string }
+        groupId: { type: string }
+        submittedBy: { type: string }
+        submittedAt: { type: string, format: date-time }
+        forced: { type: boolean }
+        reason: { type: string, nullable: true }
+        tasks:
+          type: array
+          items:
+            type: object
+            required: [id, title, status]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              status: { type: string, enum: [todo, in_progress, review, done] }
+              assigneeId: { type: string, nullable: true }
+              latestDeliverable:
+                nullable: true
+                allOf:
+                  - { $ref: '#/components/schemas/Deliverable' }
+    EventAck:
+      type: object
+      required: [duplicate, eventId]
+      properties:
+        duplicate: { type: boolean }
+        eventId: { type: string }
+    Stats:
+      type: object
+      required:
+        - assignmentId
+        - totalTasks
+        - doneTasks
+        - completionRate
+        - onTimeDoneTasks
+        - lateDoneTasks
+        - onTimeCompletionRate
+        - overdueTasks
+        - everOverdueTasks
+        - overdueRate
+        - eventCount
+      properties:
+        assignmentId: { type: string }
+        totalTasks: { type: integer }
+        doneTasks: { type: integer }
+        completionRate: { type: number }
+        onTimeDoneTasks: { type: integer }
+        lateDoneTasks: { type: integer }
+        onTimeCompletionRate: { type: number }
+        overdueTasks: { type: integer, description: 仅在途逾期 }
+        everOverdueTasks: { type: integer, description: 在途逾期 + 迟完成 }
+        overdueRate: { type: number }
+        eventCount: { type: integer }
+    ReviewWindow:
+      type: object
+      required: [id, assignmentId, openedBy, opensAt, closesAt]
+      properties:
+        id: { type: string }
+        assignmentId: { type: string }
+        openedBy: { type: string }
+        opensAt: { type: string, format: date-time }
+        closesAt: { type: string, format: date-time }
+    ReviewScores:
+      type: object
+      required: [contribution, quality, collaboration, punctuality]
+      additionalProperties: false
+      properties:
+        contribution: { type: integer, minimum: 1, maximum: 5 }
+        quality: { type: integer, minimum: 1, maximum: 5 }
+        collaboration: { type: integer, minimum: 1, maximum: 5 }
+        punctuality: { type: integer, minimum: 1, maximum: 5 }
+    AnonymousReviewRow:
+      type: object
+      required: [memberId, reviewCount, averageScores]
+      properties:
+        memberId: { type: string }
+        reviewCount: { type: integer }
+        averageScores:
+          type: object
+          description: 四维均值（保留两位小数）；不含 reviewerId 与逐条分数
+          properties:
+            contribution: { type: number }
+            quality: { type: number }
+            collaboration: { type: number }
+            punctuality: { type: number }
+    TaskFull:
+      type: object
+      required: [id, key, title, status, due, estimatedLoad, rejected, deliverables, reviewTrail]
+      properties:
+        id: { type: string }
+        key: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        assigneeId: { type: string, nullable: true }
+        due: { type: string, format: date-time }
+        estimatedLoad: { type: integer }
+        rejected: { type: boolean }
+        deliverables: { type: array, items: { $ref: '#/components/schemas/Deliverable' } }
+        reviewTrail:
+          type: array
+          description: 只含 submit / reject / approve 三类
+          items:
+            type: object
+            required: [type, actorId, occurredAt]
+            properties:
+              type: { type: string, enum: [submit, reject, approve] }
+              actorId: { type: string }
+              occurredAt: { type: string, format: date-time }
+              reason: { type: string, nullable: true }
+    EvidencePanel:
+      type: object
+      required: [memberId, tasks, deliverables, reviewTrail, timeline]
+      properties:
+        memberId: { type: string }
+        tasks: { type: array, items: { $ref: '#/components/schemas/TaskFull' } }
+        deliverables: { type: array, items: { $ref: '#/components/schemas/Deliverable' } }
+        reviewTrail: { type: array, items: { type: object } }
+        timeline:
+          type: array
+          items: { $ref: './event.v1.schema.json' }
+    Report:
+      type: object
+      required: [id, assignmentId, exportedBy, createdAt, expiresAt, pdfUrl, imageUrl, content]
+      properties:
+        id: { type: string }
+        assignmentId: { type: string }
+        exportedBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        pdfUrl: { type: string, description: mock 为 mock-artifact:// 占位协议 }
+        imageUrl: { type: string }
+        content:
+          type: object
+          required: [assignment, milestones, memberSummaries, stats, peerReviewSummary, disputes]
+          properties:
+            assignment:
+              type: object
+              properties:
+                id: { type: string }
+                title: { type: string }
+                finalDdl: { type: string, format: date-time }
+                groupId: { type: string }
+                members: { type: array, items: { type: string } }
+            milestones:
+              type: array
+              items:
+                allOf:
+                  - { $ref: '#/components/schemas/Milestone' }
+                  - type: object
+                    properties:
+                      achieved: { type: boolean, nullable: true, description: 恒 null（无 milestone_done 事件源） }
+            memberSummaries:
+              type: array
+              items:
+                type: object
+                required: [memberId, taskCount, doneCount, timelineDigest]
+                properties:
+                  memberId: { type: string }
+                  taskCount: { type: integer }
+                  doneCount: { type: integer }
+                  timelineDigest:
+                    type: array
+                    description: 最多 5 条，只留 type/occurredAt/objectRef（不泄漏 payload）
+                    items:
+                      type: object
+                      required: [type, occurredAt, objectRef]
+                      properties:
+                        type: { type: string }
+                        occurredAt: { type: string, format: date-time }
+                        objectRef: { type: object }
+            stats: { $ref: '#/components/schemas/Stats' }
+            peerReviewSummary:
+              type: array
+              items: { $ref: '#/components/schemas/AnonymousReviewRow' }
+            disputes:
+              type: array
+              description: 申诉功能未实现，恒 []
+              items: { type: object }
+    InternalTask:
+      type: object
+      description: 词表为 assignee（非 assigneeId），供真 B 的 dispatcher/yellowcard 消费
+      required: [id, assignmentId, key, title, status, due, estimatedLoad, rejected]
+      properties:
+        id: { type: string }
+        assignmentId: { type: string }
+        key: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        assignee: { type: string, nullable: true }
+        due: { type: string, format: date-time }
+        estimatedLoad: { type: integer }
+        rejected: { type: boolean }
+        deliverables: { type: array, items: { $ref: '#/components/schemas/Deliverable' } }
+    ReminderJob:
+      type: object
+      description: 真 B sqlite reminder_jobs 行（snake_case 原样出参）
+      required: [id, object_kind, object_id, assignment_id, level, channel, fire_at, status, dedup_key, created_at]
+      properties:
+        id: { type: string }
+        object_kind: { type: string, enum: [task, milestone] }
+        object_id: { type: string }
+        assignment_id: { type: string }
+        level: { type: string, enum: [48h, 24h, overdue] }
+        channel: { type: string, enum: [inapp, email, wechat] }
+        fire_at: { type: string, format: date-time }
+        sent_at: { type: string, nullable: true }
+        status: { type: string, enum: [pending, sent, failed, cancelled] }
+        dedup_key: { type: string }
+        attempts: { type: integer }
+        last_error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    YellowCard:
+      type: object
+      description: 真 B sqlite yellow_cards 行
+      required: [id, assignment_id, member_id, streak, level]
+      properties:
+        id: { type: string }
+        assignment_id: { type: string }
+        member_id: { type: string }
+        streak: { type: integer, description: '当前逾期任务数（decisions #22）' }
+        level: { type: integer, enum: [1, 2] }
+        notified_leader_at: { type: string, nullable: true }
+    Notification:
+      type: object
+      description: 真 B sqlite notifications 行
+      required: [id, user_id, type, title, body, created_at]
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        type: { type: string, enum: [reminder, yellow_card_self, yellow_card_leader, mention, reject] }
+        title: { type: string }
+        body: { type: string }
+        object_kind: { type: string, nullable: true }
+        object_id: { type: string, nullable: true }
+        job_id: { type: string, nullable: true }
+        event_id: { type: string, nullable: true }
+        read_at: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    Metrics:
+      type: object
+      required: [generatedAt, assignments, aiDrafts, reminders, reminderNotes, draftCommit]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        assignments:
+          type: object
+          properties:
+            total: { type: integer }
+            bySource:
+              type: object
+              properties:
+                template: { type: integer }
+                ai: { type: integer }
+                manual: { type: integer }
+            templateAiRate: { type: number, nullable: true }
+        aiDrafts:
+          type: object
+          properties:
+            calls: { type: integer }
+            degraded: { type: integer }
+            degradedRate: { type: number, nullable: true }
+            cached: { type: integer }
+        reminders:
+          type: object
+          properties:
+            sent: { type: integer }
+            pending: { type: integer }
+            failed: { type: integer }
+            avgDelaySec: { type: number, nullable: true }
+            maxDelaySec: { type: number, nullable: true }
+        reminderNotes:
+          type: object
+          properties:
+            total: { type: integer }
+            read: { type: integer }
+            openRate: { type: number, nullable: true }
+        draftCommit:
+          type: object
+          properties:
+            committed: { type: integer }
+            avgSec: { type: number, nullable: true }
+            maxSec: { type: number, nullable: true }
