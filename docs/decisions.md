@@ -26,7 +26,11 @@
 - 影响接口：POST /v1/subscriptions/collect（照常建，H5 阶段收占位事件）；提醒通道降级链。
 - 备忘：真实接入时 subscribe_quota 须细化为按 (user, template) 记账；MVP 单模板下与按 user 记账等价。
 
-## 7. 待登记（后续步骤产生）
+## 7. 2026-11-21 · B 线 · TaskDraft 校验边界
+- 结论：校验器强制结构规则 + due≤finalDdl + 里程碑 due 升序 + dependsOn 引用/无环 + 禁 assignee/userId；"间隔≥1天、末里程碑≤DDL-1天"为**生成不变量**，由 milestone-engine（步骤 5）保证，校验器不拦手动编辑放宽（PRD F7"全部可手动改"）。
+- 影响接口：from-template / ai-draft / PUT drafts 共用同一校验器；schema 文件与校验器有防漂移单测。
+
+## 8. 待登记（后续步骤产生）
 - fromDraft 幂等键缺口（步骤 8 workaround：重试前查 A internal/tasks 判存）。
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

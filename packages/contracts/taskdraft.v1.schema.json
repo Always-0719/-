@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "groupwork/contracts/taskdraft.v1.schema.json",
+  "title": "TaskDraft v1",
+  "description": "canonical owner = B 线；冻结契约，变更需三线会签。结构约束由本 schema 表达；语义规则（due ≤ finalDdl、dependsOn 引用存在且无环、里程碑 due 升序）由 services/b-time/src/core/taskdraft-validator.js 实现并单测锁定。",
+  "type": "object",
+  "required": ["draftId", "assignment", "tasks", "milestones"],
+  "additionalProperties": false,
+  "properties": {
+    "draftId": { "type": "string", "minLength": 1 },
+    "assignment": {
+      "type": "object",
+      "required": ["title", "finalDdl", "requirementsText"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "finalDdl": { "type": "string", "format": "date-time" },
+        "requirementsText": { "type": "string", "maxLength": 5000 },
+        "rubric": { "type": ["object", "null"], "description": "F8 P1 钩子，MVP 恒 null" }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["key", "title", "description", "deliverableSpec", "estimatedLoad", "due", "dependsOn"],
+        "additionalProperties": false,
+        "description": "additionalProperties=false 即禁止 assignee/userId（认领制）；AI 建议角色仅允许出现在 description 文本",
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "deliverableSpec": { "type": "string" },
+          "estimatedLoad": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "due": { "type": "string", "format": "date-time" },
+          "dependsOn": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "milestones": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "due"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "due": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}
