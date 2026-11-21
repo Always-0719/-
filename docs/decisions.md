@@ -30,7 +30,11 @@
 - 结论：校验器强制结构规则 + due≤finalDdl + 里程碑 due 升序 + dependsOn 引用/无环 + 禁 assignee/userId；"间隔≥1天、末里程碑≤DDL-1天"为**生成不变量**，由 milestone-engine（步骤 5）保证，校验器不拦手动编辑放宽（PRD F7"全部可手动改"）。
 - 影响接口：from-template / ai-draft / PUT drafts 共用同一校验器；schema 文件与校验器有防漂移单测。
 
-## 8. 待登记（后续步骤产生）
+## 8. 2026-11-21 · B 线 · 依赖切换与 writeEvent 薄客户端
+- 结论：USE_MOCK_A/C=true（默认）走 A_BASE_URL/C_BASE_URL（默认 e2e mock 8787）；false 必须配 A_REAL_URL/C_REAL_URL，缺失显式报错。writeEvent 先以 B 内薄客户端实现（幂等 eventId + 重试 3 次 + 本地 jsonl 队列补传），联调点 1 换 C 官方 SDK，接口形状不变。
+- 影响接口：B 对 A/C 的全部消费经 deps/a-client、deps/c-client 唯一出口。
+
+## 9. 待登记（后续步骤产生）
 - fromDraft 幂等键缺口（步骤 8 workaround：重试前查 A internal/tasks 判存）。
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。
