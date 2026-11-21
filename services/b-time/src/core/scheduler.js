@@ -17,7 +17,7 @@ function occurrences(due, now) {
   return out;
 }
 
-export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, listTasks = aListTasks, dispatcher = null } = {}) {
+export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, listTasks = aListTasks, dispatcher = null, yellowcards = null } = {}) {
   if (tickMs > 60000) throw new Error('tickMs 必须 ≤60s（F16 触发误差 <5min）');
   const ins = db.prepare(`INSERT INTO reminder_jobs
     (id, object_kind, object_id, assignment_id, level, channel, fire_at, dedup_key, created_at)
@@ -61,7 +61,8 @@ export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, li
       created += materialize(await objectsOf(a.id), at);
     }
     const dispatched = dispatcher ? await dispatcher.dispatchPending(at) : null;
-    return { at, created, dispatched };
+    const yc = yellowcards ? await yellowcards.scan(at) : null;
+    return { at, created, dispatched, yellowcards: yc };
   }
 
   // refresh 语义：未发送（pending/failed）标 cancelled 后重算；同 key 的 cancelled 行被复活，

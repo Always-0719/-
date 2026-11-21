@@ -118,6 +118,16 @@
 - live 冒烟（flag 开 outbox 模拟）：+47h 作业 7 job → 1 微信（quota 1→0）+ 6 邮件降级 + 7 站内，全 sent；设置页额度卡接真显示（剩余/最近续订/通道开关），续订按钮禁用留小程序壳引导。
 - 影响接口：新增 B 自主 collect/quota 两接口；冻结 8 端点不变。
 
+## 22. 2026-11-21 · B 线 · 黄牌引擎与 C 统计消费（步骤 17）
+- **streak 语义定稿（MVP）**：= C stats/overdue 返回的"该成员在该作业下当前逾期任务数"（mock 即此语义：assignee 非空、status≠done、due<now 计数）。F19"连续 2 次"在 MVP 解释为 streak≥2 升级；接真前与 C 确认是否改"连续逾期次数"语义（#15 遗留项收窄为此确认）。
+- 架构拆两层：yellowcard-engine.js 纯函数（levelOf/planCards/selfCopy/leaderCopy + FORBIDDEN 禁用词表）；yellowcard.js 消费服务（scan 遍历 assignments → C stats → planCards 判重 → 发卡 + 通知 + writeEvent）。scheduler.tick 末尾消费（可选注入，默认 null 不影响既有行为），C 挂当 tick 跳过该作业下 tick 补。
+- 判重与升级：UNIQUE(assignment_id,member_id,streak) 每 streak 值一卡；组长只通知一次——streak≥2 且该 (aid,member) 无 notified_leader_at 才发组长通知，后续 streak 新卡沿用旧时间戳（streak=3 不重复通知组长，单测锁定）。重扫/重启幂等（live 验证）。
+- 通知：本人 yellow_card_self 每卡必发；组长 yellow_card_leader 仅升级时；确定性 id（n-{cardId}-s/-l）+ INSERT OR IGNORE 兜底。文案中性：本人"第 N 次逾期记录+处理/求助引导"，组长"成员 X 的任务已两次逾期+私下了解/协调支援"；FORBIDDEN=['搭便车','划水','懒','拖延','点名','批评','自私','不负责'] 单测全组合零命中。任务名经 A listTasks 取（A 挂降级"任务"泛称，发卡不受阻）。
+- Event：每卡一条 yellow_card，eventId=cardId（幂等），actorId='system'，objectRef={kind:'yellow_card',id:cardId}，payload={memberId,streak,level}；经 c-client writeEvent（失败重试 3 次+本地队列兜底既有机制）。形状用 e2e/lib/ledger.js assertEventShape 校验；mock 账本 timeline?type=yellow_card 可查（集成测试+live 双验证）。
+- 组长版文案含 memberId（uid）：A 无用户昵称查询契约，MVP 以 uid 标识（私发组长不公开）；接真若有 profile 接口再换昵称。
+- live 冒烟：draft 编辑任务 due 至过去（validator 允许 ≤finalDdl 的过去 due）→ commit → 组员认领 2 任务 → tick：streak2 卡 level2、本人/组长通知、账本 1 条 actor=system；13 提醒 job 同 tick 全 sent；重启后卡/通知/账本计数不变。
+- 影响接口：消费冻结 GET /v1/internal/stats/overdue 与 POST /v1/events（形状不变）；无新增端点（观测端点步骤 18）。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
-- 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。
+- 黄牌 streak 语义 MVP 已定（#22：当前逾期任务数）；接真前与 C 确认是否改"连续逾期次数"。

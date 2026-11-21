@@ -13,6 +13,7 @@ import { registerSubscriptions } from './routes/subscriptions.js';
 import { registerInternal } from './routes/internal.js';
 import { createScheduler } from './core/scheduler.js';
 import { createDispatcher } from './core/dispatcher.js';
+import { createYellowCardService } from './core/yellowcard.js';
 
 const H5_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/web-h5');
 const MIME = {
@@ -116,7 +117,7 @@ if (isMain) {
   registerAssignments({ route, db });
   registerNotifications({ route, db });
   registerSubscriptions({ route, db });
-  const scheduler = createScheduler({ db, dispatcher: createDispatcher({ db }) });
+  const scheduler = createScheduler({ db, dispatcher: createDispatcher({ db }), yellowcards: createYellowCardService({ db }) });
   registerInternal({ route, db, scheduler });
   scheduler.start();
   const port = Number(process.env.B_PORT || 8788);
