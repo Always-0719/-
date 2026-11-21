@@ -63,6 +63,14 @@
 - 新增 B 内部表 ai_cache / ai_usage（迁移 004，非 PRD 数据模型）；限频 ai-draft 每用户 5 次/分钟（内存滑窗）。
 - 影响接口：POST /v1/assignments/ai-draft（行为增强，形状不变）。
 
+## 16. 2026-11-21 · B 线 · H5 托管与走查方法（步骤 11）
+- H5 由 b-time 同源静态托管 `/h5/*`（apps/web-h5，零依赖 node:http 读文件）；路径穿越双层防护：WHATWG URL 规范化后的 `%2e%2e` 折叠→404，编码 `%5C` 解码后逃逸 H5_ROOT→403（startsWith 守卫）。
+- `/dev/a/*` 仅开发代理（SESSION_MODE!=='jwt' 才挂载），透传 method/path/query/auth/body 到 A_BASE_URL，5s 超时→502；jwt 模式 404。H5 会话存 localStorage（mock 登录码），不引入 cookie/鉴权改造。
+- 里程碑排序双通道：HTML5 drag&drop + ▲▼ 按钮（移动端无 drag 事件兜底）；最少 1 里程碑、任务最少 2 的删除下限前端拦截。
+- 375px 走查方法：browser-use 无视口工具，用同源 iframe（width=375）包裹 /h5/ 页面实测 innerWidth/scrollWidth；发现 ms-row 内 datetime-local 固有宽度撑破 flex（min-width:auto）→ `.ms-row input{min-width:0}` 修复，修后 scrollWidth 360≤375。
+- 渲染一律 textContent（无 innerHTML 插值），脱敏占位符与用户输入均按纯文本展示。
+- 影响接口：无新增冻结端点；GET /h5/*、/dev/a/* 为 B 自有开发面。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

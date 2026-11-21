@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小组作业 · 建作业向导</title>
+<link rel="stylesheet" href="/h5/style.css">
+</head>
+<body>
+<h1>建作业向导（B 线 H5）</h1>
+
+<div class="card" id="login-card">
+  <h2>1 · 登录</h2>
+  <div class="row">
+    <input id="login-code" placeholder="昵称/代号（开发 mock 登录）" autocomplete="off">
+    <button id="login-btn">登录</button>
+  </div>
+  <div class="muted" id="login-state">未登录</div>
+</div>
+
+<div class="card" id="group-card">
+  <h2>2 · 小组</h2>
+  <div class="row">
+    <input id="gid-input" placeholder="已有 groupId（g-…）" autocomplete="off">
+    <button id="gid-use" class="secondary">使用</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button id="gid-create" class="ghost">没有组？新建演示组</button>
+  </div>
+  <div class="muted" id="gid-state">未选择小组</div>
+</div>
+
+<div class="card">
+  <h2>3 · 选择拆解方式</h2>
+  <div class="tabs">
+    <button id="tab-ai" class="active">AI 拆解</button>
+    <button id="tab-tpl">模板</button>
+  </div>
+
+  <label>最终截止（finalDdl）</label>
+  <input id="ddl" type="datetime-local">
+  <label>小组人数</label>
+  <input id="member-count" type="number" min="1" max="8" value="4">
+
+  <div id="pane-ai">
+    <label>作业要求（粘贴老师的要求文本，送 AI 前自动脱敏）</label>
+    <textarea id="req-text" placeholder="例如：完成市场调研报告并课堂展示，含问卷、数据分析与 PPT…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="ai-go">AI 拆解 → 确认页</button>
+    </div>
+  </div>
+
+  <div id="pane-tpl" class="hidden">
+    <label>模板</label>
+    <select id="tpl-select"></select>
+    <label>作业标题（可选）</label>
+    <input id="tpl-title" placeholder="留空用模板名">
+    <div class="row" style="margin-top:10px">
+      <button id="tpl-go">生成模板草稿 → 确认页</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { bApi, aApi, setSession, getUserId, getToken, getGid, setGid, toast, defaultDdlInput, fromLocalInput } from '/h5/lib/api.js';
+
+const $ = (id) => document.getElementById(id);
+$('ddl').value = defaultDdlInput();
+
+function refreshState() {
+  $('login-state').textContent = getToken() ? `已登录：${getUserId()}` : '未登录';
+  $('gid-state').textContent = getGid() ? `当前小组：${getGid()}` : '未选择小组';
+  $('gid-input').value = getGid();
+}
+refreshState();
+
+$('login-btn').addEventListener('click', async () => {
+  const code = $('login-code').value.trim();
+  if (!code) return toast('请输入昵称/代号');
+  const r = await aApi('POST', '/v1/auth/wechat-login', { code });
+  setSession(r.body.token, r.body.userId);
+  refreshState();
+  toast('登录成功', 'ok');
+});
+
+$('gid-use').addEventListener('click', () => {
+  const gid = $('gid-input').value.trim();
+  if (!gid) return toast('请输入 groupId');
+  setGid(gid);
+  refreshState();
+});
+
+$('gid-create').addEventListener('click', async () => {
+  if (!getToken()) return toast('请先登录');
+  const r = await aApi('POST', '/v1/groups', { name: `H5 演示组 ${getUserId()}`, joinNeedConfirm: false });
+  setGid(r.body.id);
+  refreshState();
+  toast(`已建组 ${r.body.id}`, 'ok');
+});
+
+$('tab-ai').addEventListener('click', () => {
+  $('tab-ai').classList.add('active'); $('tab-tpl').classList.remove('active');
+  $('pane-ai').classList.remove('hidden'); $('pane-tpl').classList.add('hidden');
+});
+$('tab-tpl').addEventListener('click', async () => {
+  $('tab-tpl').classList.add('active'); $('tab-ai').classList.remove('active');
+  $('pane-tpl').classList.remove('hidden'); $('pane-ai').classList.add('hidden');
+  if (!$('tpl-select').options.length) {
+    const r = await bApi('GET', '/v1/templates');
+    for (const t of r.body.templates) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `${t.name}（${t.category}）`;
+      $('tpl-select').appendChild(opt);
+    }
+  }
+});
+
+function commonBody() {
+  if (!getToken()) { toast('请先登录'); return null; }
+  if (!getGid()) { toast('请先选择/新建小组'); return null; }
+  const ddlVal = $('ddl').value;
+  if (!ddlVal) { toast('请选择最终截止'); return null; }
+  const memberCount = Number($('member-count').value);
+  if (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > 8) { toast('人数须为 1–8'); return null; }
+  return { groupId: getGid(), finalDdl: fromLocalInput(ddlVal), memberCount };
+}
+
+const gotoConfirm = (draftId) => { location.href = `/h5/confirm.html?draftId=${encodeURIComponent(draftId)}`; };
+
+$('ai-go').addEventListener('click', async () => {
+  const base = commonBody();
+  if (!base) return;
+  const requirementsText = $('req-text').value;
+  if (!requirementsText.trim()) return toast('请粘贴作业要求');
+  const btn = $('ai-go');
+  btn.disabled = true; btn.textContent = 'AI 拆解中…';
+  try {
+    const r = await bApi('POST', '/v1/assignments/ai-draft', { ...base, requirementsText });
+    if (r.headers.get('x-ai-degraded')) {
+      toast(`AI 不可用，已降级为模板草稿（${r.headers.get('x-ai-degraded-reason') || 'unknown'}），可在确认页继续编辑`, 'warn');
+      await new Promise(res => setTimeout(res, 1500));
+    }
+    gotoConfirm(r.body.draftId);
+  } finally {
+    btn.disabled = false; btn.textContent = 'AI 拆解 → 确认页';
+  }
+});
+
+$('tpl-go').addEventListener('click', async () => {
+  const base = commonBody();
+  if (!base) return;
+  const templateId = $('tpl-select').value;
+  if (!templateId) return toast('请选择模板');
+  const title = $('tpl-title').value.trim();
+  const r = await bApi('POST', '/v1/assignments/from-template', { ...base, templateId, ...(title ? { title } : {}) });
+  gotoConfirm(r.body.draftId);
+});
+</script>
+</body>
+</html>

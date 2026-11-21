@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>确认草稿 · 落看板</title>
+<link rel="stylesheet" href="/h5/style.css">
+</head>
+<body>
+<h1>确认草稿（全部可手动改）</h1>
+<div class="muted" id="draft-id"></div>
+
+<div class="card">
+  <h2>作业</h2>
+  <label>标题</label>
+  <input id="a-title">
+  <label>最终截止</label>
+  <input id="a-ddl" type="datetime-local">
+  <label>要求文本（已脱敏）</label>
+  <textarea id="a-req"></textarea>
+</div>
+
+<div class="card">
+  <h2>任务（认领制，不含指派）</h2>
+  <div id="tasks"></div>
+  <button id="add-task" class="ghost">＋ 添加任务</button>
+</div>
+
+<div class="card">
+  <h2>里程碑（拖拽或 ▲▼ 排序）</h2>
+  <div id="milestones"></div>
+  <button id="add-ms" class="ghost">＋ 添加里程碑</button>
+</div>
+
+<div class="card hidden" id="result-card">
+  <h2>已落看板</h2>
+  <div class="muted" id="result-aid"></div>
+  <div class="board" id="board" style="margin-top:8px"></div>
+</div>
+
+<div class="errors" id="errors"></div>
+
+<div class="actionbar">
+  <button id="save" class="secondary">保存草稿</button>
+  <button id="commit">commit 落看板</button>
+</div>
+
+<script type="module">
+import { bApi, aApi, toast, el, toLocalInput, fromLocalInput } from '/h5/lib/api.js';
+
+const $ = (id) => document.getElementById(id);
+const draftId = new URLSearchParams(location.search).get('draftId');
+let draft = null;
+
+if (!draftId) {
+  toast('缺少 draftId 参数');
+} else {
+  $('draft-id').textContent = `draftId：${draftId}`;
+  const r = await bApi('GET', `/v1/drafts/${encodeURIComponent(draftId)}`);
+  draft = r.body;
+  render();
+}
+
+function render() {
+  $('a-title').value = draft.assignment.title;
+  $('a-ddl').value = toLocalInput(draft.assignment.finalDdl);
+  $('a-req').value = draft.assignment.requirementsText || '';
+  renderTasks();
+  renderMilestones();
+}
+
+$('a-title').addEventListener('input', (e) => { draft.assignment.title = e.target.value; });
+$('a-ddl').addEventListener('change', (e) => { if (e.target.value) draft.assignment.finalDdl = fromLocalInput(e.target.value); });
+$('a-req').addEventListener('input', (e) => { draft.assignment.requirementsText = e.target.value; });
+
+function renderTasks() {
+  const box = $('tasks');
+  box.replaceChildren();
+  draft.tasks.forEach((t, i) => {
+    const card = el('div', { class: 'task-card' });
+    card.appendChild(el('div', { class: 'muted' }, `key：${t.key}`));
+
+    card.appendChild(el('label', {}, '标题'));
+    const title = el('input', { value: t.title });
+    title.addEventListener('input', (e) => { t.title = e.target.value; });
+    card.appendChild(title);
+
+    const row1 = el('div', { class: 'row' });
+    const loadWrap = el('div');
+    loadWrap.appendChild(el('label', {}, '负载（1–5）'));
+    const load = el('select');
+    for (let n = 1; n <= 5; n++) {
+      const opt = el('option', { value: String(n) }, String(n));
+      if (n === t.estimatedLoad) opt.selected = true;
+      load.appendChild(opt);
+    }
+    load.addEventListener('change', (e) => { t.estimatedLoad = Number(e.target.value); });
+    loadWrap.appendChild(load);
+    const dueWrap = el('div');
+    dueWrap.appendChild(el('label', {}, '截止'));
+    const due = el('input', { type: 'datetime-local', value: toLocalInput(t.due) });
+    due.addEventListener('change', (e) => { if (e.target.value) t.due = fromLocalInput(e.target.value); });
+    dueWrap.appendChild(due);
+    row1.appendChild(loadWrap); row1.appendChild(dueWrap);
+    card.appendChild(row1);
+
+    card.appendChild(el('label', {}, '交付物规格'));
+    const spec = el('input', { value: t.deliverableSpec });
+    spec.addEventListener('input', (e) => { t.deliverableSpec = e.target.value; });
+    card.appendChild(spec);
+
+    card.appendChild(el('label', {}, '描述'));
+    const desc = el('input', { value: t.description });
+    desc.addEventListener('input', (e) => { t.description = e.target.value; });
+    card.appendChild(desc);
+
+    card.appendChild(el('label', {}, '依赖（逗号分隔任务 key，可空）'));
+    const dep = el('input', { value: (t.dependsOn || []).join(',') });
+    dep.addEventListener('input', (e) => { t.dependsOn = e.target.value.split(',').map(s => s.trim()).filter(Boolean); });
+    card.appendChild(dep);
+
+    const del = el('button', { class: 'danger', style: 'margin-top:8px' }, '删除任务');
+    del.addEventListener('click', () => {
+      if (draft.tasks.length <= 2) return toast('至少保留 2 个任务');
+      draft.tasks.splice(i, 1);
+      renderTasks();
+    });
+    card.appendChild(del);
+    box.appendChild(card);
+  });
+}
+
+$('add-task').addEventListener('click', () => {
+  let n = 1;
+  const keys = new Set(draft.tasks.map(t => t.key));
+  while (keys.has(`t${n}`)) n++;
+  draft.tasks.push({
+    key: `t${n}`, title: `新任务${n}`, description: '', deliverableSpec: '外部文档链接',
+    estimatedLoad: 2, due: draft.assignment.finalDdl, dependsOn: [],
+  });
+  renderTasks();
+});
+
+let dragIndex = null;
+function renderMilestones() {
+  const box = $('milestones');
+  box.replaceChildren();
+  draft.milestones.forEach((m, i) => {
+    const row = el('div', { class: 'ms-row', draggable: 'true' });
+    const name = el('input', { type: 'text', value: m.name });
+    name.addEventListener('input', (e) => { m.name = e.target.value; });
+    const due = el('input', { type: 'datetime-local', value: toLocalInput(m.due) });
+    due.addEventListener('change', (e) => { if (e.target.value) m.due = fromLocalInput(e.target.value); });
+    const up = el('button', { class: 'mini' }, '▲');
+    up.addEventListener('click', () => { if (i > 0) { [draft.milestones[i - 1], draft.milestones[i]] = [draft.milestones[i], draft.milestones[i - 1]]; renderMilestones(); } });
+    const down = el('button', { class: 'mini' }, '▼');
+    down.addEventListener('click', () => { if (i < draft.milestones.length - 1) { [draft.milestones[i + 1], draft.milestones[i]] = [draft.milestones[i], draft.milestones[i + 1]]; renderMilestones(); } });
+    const del = el('button', { class: 'danger' }, '删');
+    del.addEventListener('click', () => {
+      if (draft.milestones.length <= 1) return toast('至少保留 1 个里程碑');
+      draft.milestones.splice(i, 1);
+      renderMilestones();
+    });
+    row.addEventListener('dragstart', () => { dragIndex = i; });
+    row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('dragover'); });
+    row.addEventListener('dragleave', () => row.classList.remove('dragover'));
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (dragIndex === null || dragIndex === i) return;
+      const [moved] = draft.milestones.splice(dragIndex, 1);
+      draft.milestones.splice(i, 0, moved);
+      dragIndex = null;
+      renderMilestones();
+    });
+    row.appendChild(name); row.appendChild(due); row.appendChild(up); row.appendChild(down); row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+
+$('add-ms').addEventListener('click', () => {
+  draft.milestones.push({ name: '新里程碑', due: draft.assignment.finalDdl });
+  renderMilestones();
+});
+
+function collect() {
+  return {
+    ...draft,
+    assignment: { ...draft.assignment, title: $('a-title').value, requirementsText: $('a-req').value },
+  };
+}
+
+async function save() {
+  $('errors').textContent = '';
+  try {
+    const r = await bApi('PUT', `/v1/drafts/${encodeURIComponent(draftId)}`, collect());
+    draft = r.body;
+    toast('已保存', 'ok');
+    return true;
+  } catch (e) {
+    if (e.body?.errors) $('errors').textContent = e.body.errors.join('\n');
+    return false;
+  }
+}
+
+$('save').addEventListener('click', save);
+
+$('commit').addEventListener('click', async () => {
+  if (!(await save())) return;
+  const btn = $('commit');
+  btn.disabled = true;
+  try {
+    const r = await bApi('POST', `/v1/drafts/${encodeURIComponent(draftId)}/commit`);
+    const aid = r.body.assignmentId;
+    $('result-card').classList.remove('hidden');
+    $('result-aid').textContent = `assignmentId：${aid}（A mock 看板已建任务）`;
+    const board = await aApi('GET', `/v1/assignments/${aid}/board`);
+    const names = { todo: '待办', in_progress: '进行中', review: '待审核', done: '已完成' };
+    const box = $('board');
+    box.replaceChildren();
+    for (const [key, label] of Object.entries(names)) {
+      const col = el('div', { class: 'col' });
+      const tasks = board.body.columns[key] || [];
+      col.appendChild(el('h3', {}, `${label}（${tasks.length}）`));
+      for (const t of tasks) col.appendChild(el('div', { class: 't' }, t.title));
+      box.appendChild(col);
+    }
+    toast('commit 成功，任务已落看板', 'ok');
+    btn.textContent = '已 commit';
+  } catch (e) {
+    btn.disabled = false;
+    if (e.status === 409) toast('该草稿已 commit 或不可提交', 'warn');
+  }
+});
+</script>
+</body>
+</html>
