@@ -8,7 +8,9 @@ import { baseA } from './deps/a-client.js';
 import { registerTemplates } from './routes/templates.js';
 import { registerDrafts } from './routes/drafts.js';
 import { registerAssignments } from './routes/assignments.js';
+import { registerNotifications } from './routes/notifications.js';
 import { createScheduler } from './core/scheduler.js';
+import { createDispatcher } from './core/dispatcher.js';
 
 const H5_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/web-h5');
 const MIME = {
@@ -112,7 +114,8 @@ if (isMain) {
   registerTemplates({ route, db });
   registerDrafts({ route, db });
   registerAssignments({ route, db });
-  createScheduler({ db }).start();
+  registerNotifications({ route, db });
+  createScheduler({ db, dispatcher: createDispatcher({ db }) }).start();
   const port = Number(process.env.B_PORT || 8788);
   server.listen(port, () => console.log(`b-time listening on ${port}`));
 }

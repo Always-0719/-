@@ -80,6 +80,16 @@
 - 缺陷记录：首版同步消费 async listTasks（Promise.status undefined → 任务静默漏扫），同步 stub 单测未暴露；修复为 await 且全部 stub 改 async 防回归。live 冒烟（真 B+mock A，+47h 作业）job 集合与独立计算期望 7/7 精确匹配、重启 id 集合不变。
 - 影响接口：无新增冻结端点；B 内部 scheduler + reminder_jobs 行为。
 
+## 18. 2026-11-21 · B 线 · 通道下发与收件人规则（步骤 13）
+- 收件人：task→认领人，未认领→组长（assignments.created_by）；milestone→组成员快照（commit 时经 getGroup 落 members_json，迁移 005；A 挂兜底组长；成员后续变动不回填，MVP 取舍）。
+- 邮箱可用性：mock email-login uid 形如 `u-<email>` 直接推导；微信登录无邮箱→仅站内。真实 A 的用户邮箱接口接真时再议（当前契约无）。
+- 站内必发：notifications 以 (job_id,user_id) UNIQUE + INSERT OR IGNORE 保证重试不重复（迁移 005）；邮件失败不阻塞站内落库。
+- 重试：reminder_jobs.attempts/last_error（迁移 005）；每 tick 重试 pending，3 次失败标 failed 不再重试；failed 时站内信已存在（提醒永不丢）。
+- email 适配器零依赖：dev 无 SMTP_HOST → outbox/emails.jsonl（gitignore）；生产最小 SMTP 客户端（net/tls，EHLO/AUTH PLAIN/MAIL/RCPT/DATA/QUIT，等 221 再收尾），单测用 fake SMTP socket 服务端验证对话。
+- 站内信接口非冻结清单（B 自主）：GET /v1/notifications?unread=1、POST /v1/notifications/{id}/read（他人 id 404）。
+- 文案中性：48h/24h/逾期三版标题 + 逾期"第 N 天"计数，无指责词；黄牌两版文案留步骤 17。
+- 影响接口：新增 B 自主站内信两接口；冻结 8 端点不变。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义（"当前逾期任务数" vs "连续逾期次数"）接真前与 C 确认（步骤 17）。

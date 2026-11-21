@@ -17,7 +17,7 @@ function occurrences(due, now) {
   return out;
 }
 
-export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, listTasks = aListTasks } = {}) {
+export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, listTasks = aListTasks, dispatcher = null } = {}) {
   if (tickMs > 60000) throw new Error('tickMs 必须 ≤60s（F16 触发误差 <5min）');
   const ins = db.prepare(`INSERT INTO reminder_jobs
     (id, object_kind, object_id, assignment_id, level, channel, fire_at, dedup_key, created_at)
@@ -57,7 +57,8 @@ export function createScheduler({ db, now = () => Date.now(), tickMs = 60000, li
     for (const a of db.prepare('SELECT id FROM assignments').all()) {
       created += materialize(await objectsOf(a.id), at);
     }
-    return { at, created };
+    const dispatched = dispatcher ? await dispatcher.dispatchPending(at) : null;
+    return { at, created, dispatched };
   }
 
   // refresh 语义：队列整体重建（历史留在 notifications），pending/cancelled/sent 全清后按当前 due 重算

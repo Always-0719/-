@@ -105,6 +105,16 @@ export function registerAssignments({ route, db, orchestrator }) {
       throw e;
     }
 
+    // 成员快照供里程碑提醒收件人；A 不可用兜底组长（成员变动不回填，MVP 取舍见 decisions #18）
+    let members = [row.created_by];
+    try {
+      const g = await getGroup(row.group_id, c.token);
+      if (g.status === 200 && Array.isArray(g.body.members)) {
+        members = g.body.members.map(m => (typeof m === 'string' ? m : m.userId));
+      }
+    } catch {}
+    c.db.prepare('UPDATE assignments SET members_json = ? WHERE id = ?').run(JSON.stringify(members), aid);
+
     if (!tasksExist) {
       let r;
       try { r = await tasksFromDraft(aid, payload, row.group_id); } catch { r = { status: 0 }; }
