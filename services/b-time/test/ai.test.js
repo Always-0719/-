@@ -178,6 +178,10 @@ test('HTTP：ai-draft 201，body 纯 TaskDraft，无降级头', async () => {
   assert.equal(r.status, 201);
   assert.ok(validateTaskDraft(r.body).ok);
   assert.equal(r.headers.get('x-ai-degraded'), null);
+  const log = db.prepare('SELECT * FROM ai_draft_log WHERE draft_id = ?').get(r.body.draftId);
+  assert.equal(log.degraded, 0);
+  assert.equal(log.cached, 0);
+  assert.equal(log.group_id, gid);
 });
 
 test('HTTP：>5000 字 400', async () => {
@@ -206,4 +210,7 @@ test('HTTP：provider 失败 → 201 降级模板 + 降级响应头，body 仍�
   assert.equal(r.headers.get('x-ai-degraded-reason'), 'provider-error');
   assert.ok(validateTaskDraft(r.body).ok);
   assert.ok(r.body.assignment.title.includes('降级'));
+  const log = db.prepare('SELECT * FROM ai_draft_log WHERE draft_id = ?').get(r.body.draftId);
+  assert.equal(log.degraded, 1);
+  assert.equal(log.degraded_reason, 'provider-error');
 });

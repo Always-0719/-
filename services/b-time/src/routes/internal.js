@@ -82,4 +82,41 @@ export function registerInternal({ route, db, scheduler }) {
     const r = await scheduler.tick();
     return { status: 200, body: { ok: true, ...r } };
   }, { internal: true });
+
+  // 埋点指标（步骤 19，B PRD §7 线内指标）：全部由 owned 表现算，无额外上报链路
+  route('GET', '/v1/internal/metrics', () => {
+    const sec = (x) => (x == null ? null : Math.round(x * 10) / 10);
+    const rate = (n, d) => (d ? Math.round((n / d) * 1000) / 1000 : null);
+
+    const bySource = { template: 0, ai: 0, manual: 0 };
+    for (const r of db.prepare('SELECT source, COUNT(*) n FROM assignments GROUP BY source').all()) bySource[r.source] = r.n;
+    const total = bySource.template + bySource.ai + bySource.manual;
+
+    const ai = db.prepare('SELECT COUNT(*) calls, COALESCE(SUM(degraded), 0) degraded, COALESCE(SUM(cached), 0) cached FROM ai_draft_log').get();
+    // 触发误差 = sent_at − max(fire_at, created_at)：补扫 job（边界早于物化）以物化时刻为基准，
+    // 否则历史积压会被误算成调度抖动（PRD 验收口径是队列调度误差 <5min）
+    const rem = db.prepare(`SELECT COALESCE(SUM(status = 'sent'), 0) sent, COALESCE(SUM(status = 'pending'), 0) pending,
+        COALESCE(SUM(status = 'failed'), 0) failed,
+        AVG(CASE WHEN status = 'sent' THEN (julianday(sent_at) - MAX(julianday(fire_at), julianday(created_at))) * 86400 END) avgDelay,
+        MAX(CASE WHEN status = 'sent' THEN (julianday(sent_at) - MAX(julianday(fire_at), julianday(created_at))) * 86400 END) maxDelay
+      FROM reminder_jobs`).get();
+    const notes = db.prepare("SELECT COUNT(*) total, COALESCE(SUM(read_at IS NOT NULL), 0) read FROM notifications WHERE type = 'reminder'").get();
+    // 拆解→commit 耗时：aid 由 draftId 确定性派生（a-<draftId>），commit 时 assignments.created_at 即落库时刻
+    const commit = db.prepare(`SELECT COUNT(*) n,
+        AVG((julianday(a.created_at) - julianday(d.created_at)) * 86400) avgSec,
+        MAX((julianday(a.created_at) - julianday(d.created_at)) * 86400) maxSec
+      FROM drafts d JOIN assignments a ON a.id = 'a-' || d.id WHERE d.status = 'committed'`).get();
+
+    return {
+      status: 200,
+      body: {
+        generatedAt: new Date().toISOString(),
+        assignments: { total, bySource, templateAiRate: rate(bySource.template + bySource.ai, total) },
+        aiDrafts: { calls: ai.calls, degraded: ai.degraded, degradedRate: rate(ai.degraded, ai.calls), cached: ai.cached },
+        reminders: { sent: rem.sent, pending: rem.pending, failed: rem.failed, avgDelaySec: sec(rem.avgDelay), maxDelaySec: sec(rem.maxDelay) },
+        reminderNotes: { total: notes.total, read: notes.read, openRate: rate(notes.read, notes.total) },
+        draftCommit: { committed: commit.n, avgSec: sec(commit.avgSec), maxSec: sec(commit.maxSec) },
+      },
+    };
+  }, { internal: true });
 }

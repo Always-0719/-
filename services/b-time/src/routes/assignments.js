@@ -56,6 +56,9 @@ export function registerAssignments({ route, db, orchestrator }) {
     const now = new Date().toISOString();
     c.db.prepare(`INSERT INTO drafts (id, group_id, payload, status, created_by, source, created_at, updated_at)
       VALUES (?, ?, ?, 'preview', ?, 'ai', ?, ?)`).run(result.draft.draftId, groupId, JSON.stringify(result.draft), c.uid, now, now);
+    c.db.prepare(`INSERT INTO ai_draft_log (id, group_id, draft_id, degraded, degraded_reason, cached, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(`adl-${crypto.randomUUID()}`, groupId, result.draft.draftId, result.degraded ? 1 : 0, result.degradedReason || null, result.cached ? 1 : 0, now);
     console.log(`[ai-draft] group=${groupId} degraded=${result.degraded}${result.degradedReason ? `(${result.degradedReason})` : ''} cached=${!!result.cached} sanitizeHits=${JSON.stringify(result.sanitizeHits)}`);
     // 降级/缓存标记走响应头：TaskDraft v1 schema 顶层 additionalProperties=false，body 保持纯契约形状
     const headers = {};

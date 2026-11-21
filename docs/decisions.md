@@ -138,6 +138,21 @@
 - 结果：混合 `cd e2e && npm test` 5 pass / 2 skip（仅 C）；纯 mock 3 pass / 4 skip；B 单测 113/113。gate2 可重复跑（第二遍对已存在数据全绿）。
 - 影响接口：新增 4 个 B 自主 internal 端点；冻结 8 端点不变。
 
-## 15. 待登记（后续步骤产生）
-- 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
+## 24. 2026-11-21 · B 线 · 埋点指标 + DoD 收尾（步骤 19）
+- **AI 降级率此前不可统计**（仅 console + x-ai-degraded 响应头）→ 迁移 008 新增 `ai_draft_log`（group_id/draft_id/degraded/degraded_reason/cached/created_at，CHECK 0/1），ai-draft 路由每次调用落一行（含缓存命中与降级）。B 表 10→11。
+- **新增 GET /v1/internal/metrics**（B 自主 internal，无应用层鉴权同 #3）：五组指标全部由 owned 表现算，无独立上报链路——① assignments.source 分布 + 模板/AI 使用率；② ai_draft_log 降级率/缓存命中；③ reminder_jobs 触发误差；④ notifications(type=reminder) read_at 打开率；⑤ drafts→assignments（aid=`a-<draftId>` 确定性派生）拆解→commit 耗时。分母为 0 时比率返回 null 不除零。
+- **触发误差口径**：`sent_at − max(fire_at, created_at)`。补扫 job（边界早于物化，如历史逾期任务）以物化时刻为基准，否则积压被误算成调度抖动；PRD 验收口径是队列调度误差 <5min。首版直接用 sent_at−fire_at，live 冒烟暴露 avg≈19.5h 的假抖动后修正（单测补 j5 补扫用例锁定）。
+- live 冒烟（scratch db，mock A/C + 真 B + mock provider）：模板路径 28ms / AI 路径 22ms（draft→commit）；tick 14 job 全 sent；读 1 条通知后 openRate=0.025；6 作业 template 3 / ai 3 → 使用率 100%；重启后计数不变（幂等）。降级率 live=0（mock provider 不失败），降级入账由 ai.test.js HTTP 断言 + metrics.test.js 聚合断言锁定。
+- DoD 自查留档 `docs/b-line-dod.md`；demo 脚本 `docs/demo-script.md`。**录屏不可用披露**：本环境无录屏工具（浏览器截图亦受面板隐藏限制，见 #20），以带时长预算的分步 demo 脚本代替录屏，待集成门现场演示。
+- 结果：B 单测 116/116（+3 metrics）；混合 e2e 5 pass/2 skip、纯 mock 3 pass/4 skip 不变。冻结 8 端点不变。
+
+## 15. 待登记 / 契约缺口归档（步骤 19 汇总，供 v1.1 三线会签）
+- **fromDraft 无幂等键**（#10）：B 以 aid=`a-<draftId>` 确定性派生 + 重试前查 A internal/tasks 判存兜底；A 侧重复建任务风险待 v1.1 加幂等键。
+- **提醒下发无 Event v1 类型**：MVP 只写 yellow_card（#22），提醒下发留 reminder_jobs/notifications 内部审计；新增 `reminder_sent` 类型提会签。
+- **会话校验过渡**（#2）：mock token 兼容解析，接真后切 A 正式会话校验。
+- **internal 端点无应用层鉴权**（#3）：refresh/notify/观测/tick/metrics 均靠网络隔离，staging 前需加 internal token 或网关白名单。
+- **加入确认端点未入 v1**（e2e README 缺口 1）：`join-requests/{uid}/approve` 骨架先行，待会签。
+- **task_create 事件缺失**（e2e README 缺口 2）：创建不计贡献可接受，复盘需要则 v1.1 新增。
+- **时间线组级事件语义**（e2e README 缺口 5）：assignmentId=null 的组级事件纳入作业时间线，待 v1.1 会签。
 - 黄牌 streak 语义 MVP 已定（#22：当前逾期任务数）；接真前与 C 确认是否改"连续逾期次数"。
+- gate2 对 staging（真 A/C）双跑待第 4 周接真后执行（#23）；微信真机链路缺口见 R3 报告与 #21。
