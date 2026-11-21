@@ -128,6 +128,16 @@
 - live 冒烟：draft 编辑任务 due 至过去（validator 允许 ≤finalDdl 的过去 due）→ commit → 组员认领 2 任务 → tick：streak2 卡 level2、本人/组长通知、账本 1 条 actor=system；13 提醒 job 同 tick 全 sent；重启后卡/通知/账本计数不变。
 - 影响接口：消费冻结 GET /v1/internal/stats/overdue 与 POST /v1/events（形状不变）；无新增端点（观测端点步骤 18）。
 
+## 23. 2026-11-21 · B 线 · gate2 B 段解除 skip + 观测端点（步骤 18，★门 2 里程碑）
+- 三个 internal 观测端点（B 自主，无应用层鉴权同 #3）：GET /v1/internal/reminder-jobs?assignmentId&status=（400 缺参/404 未知作业）、GET /v1/internal/yellow-cards?assignmentId、GET /v1/internal/subscribe-quota?userId（无行返回 remaining 0 默认）。
+- **计划外新增（登记）**：POST /v1/internal/schedule/tick —— 手动幂等补扫。理由：gate2 需确定性触发下发/黄牌扫描，不能等 60s 定时 tick，也不能从测试重启被测服务；兼作运维补扫入口。复用 scheduler.tick，无新逻辑。
+- gate2 B 两条解除 skip，条件 `E2E_TARGET=staging`（需真 B；纯 mock 的 B 是契约 no-op mock，无观测面 → 自动条件 skip 并注释原因）。互评/导出两条保持 skip 归 C，未动一字。
+- 断言覆盖文件内全部 B TODO：47h 窗口触发 48h 级（fire_at 精确等于 due-48h 边界）、逾期任务补扫 24h/overdue、二次 tick created=0 且 job/通知计数不变（24h 去重）、quota=0 读观测端点 + 站内提醒不丢（邮件产生由 B 单测 wechat.test.js 锁定——跨主机无邮件观测面，注释说明）；黄牌 streak=2 卡 + notified_leader_at、组长文案禁用词表、本人私下提醒、账本 yellow_card actor=system、重扫幂等。
+- 测试只用冻结 A/C 端点（login/groups/invites/join/board/claim/internal/tasks/timeline）+ B internal → A/C 接真后同一套可直接对 staging 双跑（接真未发生，双跑待第 4 周）。
+- 缺陷记录：首版未来任务 due=now+47h 与 finalDdl 同式计算，毫秒级 due>finalDdl 触发校验 400 → 改 +46h 留余量（仍在 48h 窗口，断言语义不变）。
+- 结果：混合 `cd e2e && npm test` 5 pass / 2 skip（仅 C）；纯 mock 3 pass / 4 skip；B 单测 113/113。gate2 可重复跑（第二遍对已存在数据全绿）。
+- 影响接口：新增 4 个 B 自主 internal 端点；冻结 8 端点不变。
+
 ## 15. 待登记（后续步骤产生）
 - 提醒下发动作无 Event v1 类型：MVP 只写 yellow_card，提醒下发留内部日志，类型新增提三线会签。
 - 黄牌 streak 语义 MVP 已定（#22：当前逾期任务数）；接真前与 C 确认是否改"连续逾期次数"。

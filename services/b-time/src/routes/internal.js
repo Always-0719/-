@@ -43,4 +43,43 @@ export function registerInternal({ route, db, scheduler }) {
     }
     return { status: 200, body: { ok: true, created } };
   }, { internal: true });
+
+  // 观测端点（步骤 18，B 自主 internal）：gate2 断言与运维排查用
+  const requireAssignment = (c) => {
+    const aid = c.query.assignmentId;
+    if (!aid) return { error: { status: 400, body: { error: 'assignmentId 必填' } } };
+    if (!db.prepare('SELECT id FROM assignments WHERE id = ?').get(aid)) {
+      return { error: { status: 404, body: { error: 'assignment not found' } } };
+    }
+    return { aid };
+  };
+
+  route('GET', '/v1/internal/reminder-jobs', (c) => {
+    const { aid, error } = requireAssignment(c);
+    if (error) return error;
+    const status = c.query.status;
+    const jobs = db.prepare(`SELECT * FROM reminder_jobs WHERE assignment_id = ?
+      ${status ? 'AND status = ?' : ''} ORDER BY fire_at, object_kind, object_id`).all(...(status ? [aid, status] : [aid]));
+    return { status: 200, body: { jobs } };
+  }, { internal: true });
+
+  route('GET', '/v1/internal/yellow-cards', (c) => {
+    const { aid, error } = requireAssignment(c);
+    if (error) return error;
+    const cards = db.prepare('SELECT * FROM yellow_cards WHERE assignment_id = ? ORDER BY member_id, streak').all(aid);
+    return { status: 200, body: { cards } };
+  }, { internal: true });
+
+  route('GET', '/v1/internal/subscribe-quota', (c) => {
+    const userId = c.query.userId;
+    if (!userId) return { status: 400, body: { error: 'userId 必填' } };
+    const row = db.prepare('SELECT * FROM subscribe_quota WHERE user_id = ?').get(userId);
+    return { status: 200, body: { quota: { userId, remaining: row?.remaining ?? 0, collectedAt: row?.collected_at ?? null, openid: row?.openid ?? null } } };
+  }, { internal: true });
+
+  // 手动补扫（幂等）：gate2 确定性触发，不等 60s 定时 tick
+  route('POST', '/v1/internal/schedule/tick', async (c) => {
+    const r = await scheduler.tick();
+    return { status: 200, body: { ok: true, ...r } };
+  }, { internal: true });
 }

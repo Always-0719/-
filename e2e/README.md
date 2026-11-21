@@ -27,12 +27,12 @@ E2E_TARGET=staging A_BASE_URL=http://… B_BASE_URL=http://… C_BASE_URL=http:/
 | mock/server.js | A/B/C 冻结契约 in-memory 实现（状态机/打回理由/快照/幂等账本） |
 | golden-path.test.js | 门 1 黄金路径：建组→邀请确认→AI 拆解→编辑 commit→认领(409)→交付物 v1→提交→打回(400/200)→v2→通过→评论→强制提交 400→其余完成→统一提交→账本对账+子序列 |
 | contract-smoke.test.js | TaskDraft v1 形状与规则、看板四列、Event 形状、writeEvent 幂等 |
-| gate2-extended.test.js | 门 2 占位（提醒/黄牌/互评/导出），接真后解除 skip |
+| gate2-extended.test.js | 门 2：B 两条（提醒触发/去重/quota 降级、黄牌分级/中性文案/入账）已解除 skip，仅 staging（真 B）运行，纯 mock 自动条件 skip；互评/导出两条保持 skip 归 C |
 
 ## 与集成门的对应
 
 - 门 1（第 3 周末）：`npm test` 全绿 + 对账 diff=0 是签核前置条件。
-- 门 2（第 5 周末）：解除 gate2 skip，补断言后全绿。
+- 门 2（第 5 周末）：B 段已解除 skip（staging 5 pass / 2 skip，纯 mock 3 pass / 4 skip）；C 互评/导出接真后解除其余 skip。B 段经 `POST /v1/internal/schedule/tick` 确定性触发，不等 60s 定时扫描。
 - mock 与 staging 跑同一套测试；staging 红而 mock 绿 = mock 失真，修 mock 或修服务，不允许改测试迁就。
 
 ## 已知契约缺口（待第 1 周 / v1.1 三线会签）

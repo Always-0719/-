@@ -149,3 +149,45 @@ test('notify 校验：kind/recipients/eventId/assignmentId 缺失 400，未知�
     assert.equal((await s.api('GET', '/v1/notifications')).status, 401);
   } finally { s.close(); }
 });
+test('观测端点：reminder-jobs/yellow-cards/subscribe-quota 校验与形状 + 手动 tick 幂等', async () => {
+  const s = await setup();
+  try {
+    assert.equal((await s.api('GET', '/v1/internal/reminder-jobs')).status, 400);
+    assert.equal((await s.api('GET', '/v1/internal/reminder-jobs?assignmentId=a-nope')).status, 404);
+    assert.equal((await s.api('GET', '/v1/internal/yellow-cards')).status, 400);
+    assert.equal((await s.api('GET', '/v1/internal/yellow-cards?assignmentId=a-nope')).status, 404);
+    assert.equal((await s.api('GET', '/v1/internal/subscribe-quota')).status, 400);
+
+    const q0 = await s.api('GET', '/v1/internal/subscribe-quota?userId=u-none');
+    assert.equal(q0.status, 200);
+    assert.deepEqual(q0.body.quota, { userId: 'u-none', remaining: 0, collectedAt: null, openid: null });
+
+    const t1 = await s.api('POST', '/v1/internal/schedule/tick', {});
+    assert.equal(t1.status, 200);
+    assert.equal(t1.body.ok, true);
+    assert.equal(t1.body.created, 2);
+    const t2 = await s.api('POST', '/v1/internal/schedule/tick', {});
+    assert.equal(t2.body.created, 0);
+
+    const jobs = await s.api('GET', '/v1/internal/reminder-jobs?assignmentId=a1');
+    assert.equal(jobs.status, 200);
+    assert.equal(jobs.body.jobs.length, 2);
+    const pend = await s.api('GET', '/v1/internal/reminder-jobs?assignmentId=a1&status=pending');
+    assert.equal(pend.body.jobs.length, 2);
+    assert.equal((await s.api('GET', '/v1/internal/reminder-jobs?assignmentId=a1&status=sent')).body.jobs.length, 0);
+
+    s.db.prepare(`INSERT INTO yellow_cards (id, assignment_id, member_id, streak, level, notified_leader_at)
+      VALUES ('yc-1', 'a1', 'u-m2', 2, 2, ?)`).run(iso(T0));
+    const cards = await s.api('GET', '/v1/internal/yellow-cards?assignmentId=a1');
+    assert.equal(cards.status, 200);
+    assert.equal(cards.body.cards.length, 1);
+    assert.equal(cards.body.cards[0].streak, 2);
+    assert.ok(cards.body.cards[0].notified_leader_at);
+
+    s.db.prepare(`INSERT INTO subscribe_quota (user_id, remaining, collected_at, openid) VALUES ('u-a@x.com', 3, ?, 'o-a')`).run(iso(T0));
+    const q = await s.api('GET', '/v1/internal/subscribe-quota?userId=u-a%40x.com');
+    assert.equal(q.body.quota.remaining, 3);
+    assert.equal(q.body.quota.openid, 'o-a');
+    assert.ok(q.body.quota.collectedAt);
+  } finally { s.close(); }
+});
